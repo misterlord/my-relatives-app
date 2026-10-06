@@ -319,18 +319,79 @@ export function TreeViewReportModal({
   const maleCount = persons.filter((p) => p.gender === 'MALE').length;
   const femaleCount = persons.filter((p) => p.gender === 'FEMALE').length;
 
+  // Custom Print Handler: Expand all nodes first then trigger window.print()
+  const handlePrint = () => {
+    setExpandedNodeIds(allFolderIds);
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
   if (!isOpen) return null;
+
+  const todayStr = new Date().toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+      {/* Print Stylesheet for A4 Printable Report Layout */}
+      <style>{`
+        @media print {
+          /* Hide backdrop overlay & UI elements */
+          body {
+            background: white !important;
+            color: black !important;
+          }
+          .no-print, header, button, input, select {
+            display: none !important;
+          }
+          .tree-view-modal-container {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: white !important;
+            color: black !important;
+            overflow: visible !important;
+          }
+          .tree-view-modal-body {
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            padding: 0 !important;
+          }
+          .print-header {
+            display: block !important;
+          }
+        }
+      `}</style>
+
       <div
-        className={`relative flex h-[90vh] w-full max-w-4xl flex-col rounded-2xl border shadow-2xl overflow-hidden ${
+        className={`tree-view-modal-container relative flex h-[90vh] w-full max-w-4xl flex-col rounded-2xl border shadow-2xl overflow-hidden ${
           isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-100'
         }`}
       >
+        {/* Print Header (Visible only when printed) */}
+        <div className="print-header hidden p-4 mb-4 border-b-2 border-slate-900 text-black">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold">รายงานผังลำดับเครือญาติ (My Relatives Family Tree Report)</h1>
+            <span className="text-xs font-mono">วันที่พิมพ์: {todayStr}</span>
+          </div>
+          <p className="text-xs mt-1 text-slate-600">
+            จำนวนสมาชิกทั้งหมด: {totalPersons} คน | ชาย: {maleCount} คน | หญิง: {femaleCount} คน
+          </p>
+        </div>
+
         {/* Header */}
         <div
-          className={`flex items-center justify-between border-b px-6 py-4 ${
+          className={`no-print flex items-center justify-between border-b px-6 py-4 ${
             isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-950/60'
           }`}
         >
@@ -350,15 +411,15 @@ export function TreeViewReportModal({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
+              onClick={handlePrint}
+              className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all shadow-sm ${
                 isLight
-                  ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-                  : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                  : 'border-indigo-500/40 bg-indigo-950/50 text-indigo-300 hover:bg-indigo-900/60'
               }`}
-              title="พิมพ์รายงานผังเครือญาติ"
+              title="พิมพ์รายงานผังเครือญาติ (พิมพ์ผังทั้งหมดขยายครบทุกชั้น)"
             >
-              <Printer className="h-3.5 w-3.5 text-indigo-500" />
+              <Printer className="h-4 w-4 text-indigo-500" />
               <span>พิมพ์รายงาน</span>
             </button>
 
@@ -378,7 +439,7 @@ export function TreeViewReportModal({
 
         {/* Toolbar & Filter Options */}
         <div
-          className={`flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 text-xs ${
+          className={`no-print flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3 text-xs ${
             isLight ? 'border-slate-200 bg-slate-100/50' : 'border-slate-800/80 bg-slate-950/40'
           }`}
         >
@@ -443,7 +504,7 @@ export function TreeViewReportModal({
         </div>
 
         {/* Directory Tree Report Body Container */}
-        <div className="flex-1 overflow-y-auto p-6 font-mono">
+        <div className="tree-view-modal-body flex-1 overflow-y-auto p-6 font-mono">
           {treeNodes.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
               <FolderTree className="h-12 w-12 text-slate-500" />
@@ -472,7 +533,7 @@ export function TreeViewReportModal({
 
         {/* Footer */}
         <div
-          className={`flex items-center justify-between border-t px-6 py-3 text-xs ${
+          className={`no-print flex items-center justify-between border-t px-6 py-3 text-xs ${
             isLight ? 'border-slate-200 bg-slate-50 text-slate-500' : 'border-slate-800 bg-slate-950/60 text-slate-400'
           }`}
         >
