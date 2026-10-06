@@ -12,6 +12,7 @@ import {
   Maximize2,
   Minimize2,
   Users,
+  User,
 } from 'lucide-react';
 
 interface TreeNode {
@@ -197,22 +198,22 @@ const TreeNodeRow = ({
           <span className="w-5 shrink-0" />
         )}
 
-        {/* Yellow Folder Icon vs Document File Icon matching user reference image */}
-        {node.isFolder ? (
-          <div className="relative flex items-center justify-center shrink-0">
-            <svg
-              className="h-5 w-5 text-amber-400 drop-shadow-sm"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
-            </svg>
-          </div>
-        ) : (
-          <div className="relative flex items-center justify-center shrink-0">
-            <FileText className={`h-4.5 w-4.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`} />
-          </div>
-        )}
+        {/* Gender Status Icon in Tree View */}
+        <div
+          className={`relative flex h-6 w-6 items-center justify-center rounded-lg border shrink-0 font-bold ${
+            isMale
+              ? 'bg-blue-500/15 border-blue-500/30 text-blue-500'
+              : isFemale
+              ? 'bg-pink-500/15 border-pink-500/30 text-pink-500'
+              : 'bg-purple-500/15 border-purple-500/30 text-purple-500'
+          }`}
+          title={isMale ? 'เพศชาย ♂' : isFemale ? 'เพศหญิง ♀' : 'ไม่ระบุ'}
+        >
+          <User className="h-3.5 w-3.5" />
+          {node.isDeceased && (
+            <span className="absolute -top-1 -right-1 text-[9px] leading-none drop-shadow">❌</span>
+          )}
+        </div>
 
         {/* Node Text Info */}
         <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
