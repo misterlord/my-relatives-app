@@ -497,18 +497,10 @@ export function NodeModal({
                       <h3 className={`text-xl font-bold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
                         {person.name}
                       </h3>
-                      <span className={`rounded-md px-2 py-0.5 text-xs font-semibold border ${genderBadge.color}`}>
-                        {genderBadge.text}
+                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border ${genderBadge.color}`}>
+                        {person.isDeceased && <span className="text-rose-500 font-extrabold text-xs">❌</span>}
+                        <span>{genderBadge.text}</span>
                       </span>
-                      {person.isDeceased ? (
-                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30">
-                          ❌ เสียชีวิต
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                          🌱 มีชีวิตอยู่
-                        </span>
-                      )}
                     </div>
 
                     {/* Parent Info in View Mode */}

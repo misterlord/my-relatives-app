@@ -218,25 +218,31 @@ const TreeNodeRow = ({
         <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
           <span className="font-medium text-xs truncate">{node.name}</span>
 
-          {/* Gender Tag */}
+          {/* Single Combined Gender & Deceased Status Badge */}
           <span
-            className={`inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-semibold border shrink-0 ${
-              isMale
+            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[10px] font-semibold border shrink-0 ${
+              node.isDeceased
+                ? isLight
+                  ? isMale
+                    ? 'bg-slate-200 text-slate-800 border-blue-500 font-bold'
+                    : isFemale
+                    ? 'bg-slate-200 text-slate-800 border-pink-500 font-bold'
+                    : 'bg-slate-200 text-slate-800 border-slate-500 font-bold'
+                  : isMale
+                  ? 'bg-slate-800 text-slate-200 border-blue-400 font-bold'
+                  : isFemale
+                  ? 'bg-slate-800 text-slate-200 border-pink-400 font-bold'
+                  : 'bg-slate-800 text-slate-200 border-slate-600 font-bold'
+                : isMale
                 ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
                 : isFemale
                 ? 'bg-pink-500/10 text-pink-500 border-pink-500/30'
                 : 'bg-purple-500/10 text-purple-500 border-purple-500/30'
             }`}
           >
-            {isMale ? 'ชาย ♂' : isFemale ? 'หญิง ♀' : 'ไม่ระบุ'}
+            {node.isDeceased && <span className="text-rose-500 font-extrabold text-[11px] leading-none">❌</span>}
+            <span>{isMale ? 'ชาย ♂' : isFemale ? 'หญิง ♀' : 'ไม่ระบุ'}</span>
           </span>
-
-          {/* Deceased Status Tag */}
-          {node.isDeceased && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded border bg-rose-500/15 text-rose-500 border-rose-500/30 shrink-0">
-              ❌ เสียชีวิต
-            </span>
-          )}
 
           {/* Spouse Tag */}
           {node.spouseName && (
