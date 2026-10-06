@@ -12,6 +12,7 @@ export interface PersonNodeData extends Record<string, unknown> {
   gender: string; // 'MALE' | 'FEMALE' | 'OTHER'
   description?: string | null;
   birthDate?: string | null;
+  isDeceased?: boolean;
   images?: { id: string; url: string }[];
   isCompact?: boolean;
   layoutMode?: LayoutMode;
@@ -30,38 +31,59 @@ const CustomPersonNodeComponent = ({
   const imageCount = data.images?.length || 0;
   const isMale = data.gender === 'MALE';
   const isFemale = data.gender === 'FEMALE';
+  const isDeceased = Boolean(data.isDeceased);
 
   // Age & Birth Date calculation
   const age = calculateAge(data.birthDate);
   const formattedBirthDate = formatDateBE(data.birthDate);
 
-  // Theme-aware Gender styling (Male: Blue border, Female: Emerald/Green border)
-  const genderBg = isMale
+  // Border-only Gender & Status styling (No status background tint):
+  // - Neutral Card Background: White in Light mode (bg-white), Dark Slate in Dark mode (bg-slate-900)
+  // - Status Border Colors: Blue border for Male, Pink border for Female, Gray/Border for Deceased
+  const genderBg = isDeceased
     ? isLight
-      ? 'border-blue-500 bg-white hover:border-blue-600 text-slate-800 shadow-md'
-      : 'border-blue-500 bg-slate-900/90 hover:border-blue-400 text-slate-100'
+      ? isMale
+        ? 'border-blue-400 bg-white text-slate-800 shadow-sm hover:border-blue-500'
+        : isFemale
+        ? 'border-pink-400 bg-white text-slate-800 shadow-sm hover:border-pink-500'
+        : 'border-slate-400 bg-white text-slate-800 shadow-sm hover:border-slate-500'
+      : isMale
+      ? 'border-blue-400/80 bg-slate-900 text-slate-200 shadow-md hover:border-blue-300'
+      : isFemale
+      ? 'border-pink-400/80 bg-slate-900 text-slate-200 shadow-md hover:border-pink-300'
+      : 'border-slate-500 bg-slate-900 text-slate-200 shadow-md hover:border-slate-400'
+    : isMale
+    ? isLight
+      ? 'border-blue-500 bg-white text-slate-900 shadow-md hover:border-blue-600'
+      : 'border-blue-400 bg-slate-900 text-slate-100 shadow-lg hover:border-blue-300'
     : isFemale
     ? isLight
-      ? 'border-emerald-500 bg-white hover:border-emerald-600 text-slate-800 shadow-md'
-      : 'border-emerald-500 bg-slate-900/90 hover:border-emerald-400 text-slate-100'
+      ? 'border-pink-500 bg-white text-slate-900 shadow-md hover:border-pink-600'
+      : 'border-pink-400 bg-slate-900 text-slate-100 shadow-lg hover:border-pink-300'
     : isLight
-    ? 'border-purple-400 bg-white hover:border-purple-500 text-slate-800 shadow-md'
-    : 'border-purple-500/80 bg-slate-900/90 hover:border-purple-400 text-slate-100';
+    ? 'border-purple-500 bg-white text-slate-900 shadow-md hover:border-purple-600'
+    : 'border-purple-400 bg-slate-900 text-slate-100 shadow-lg hover:border-purple-300';
 
-  const badgeColor = isMale
+  const badgeColor = isDeceased
     ? isLight
-      ? 'bg-blue-50 text-blue-700 border-blue-200'
-      : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      ? 'bg-slate-100 text-slate-700 border-slate-300'
+      : 'bg-slate-800 text-slate-300 border-slate-700'
+    : isMale
+    ? isLight
+      ? 'bg-blue-50 text-blue-800 border-blue-200 font-semibold'
+      : 'bg-blue-950/60 text-blue-300 border-blue-800 font-semibold'
     : isFemale
     ? isLight
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+      ? 'bg-pink-50 text-pink-800 border-pink-200 font-semibold'
+      : 'bg-pink-950/60 text-pink-300 border-pink-800 font-semibold'
     : isLight
-    ? 'bg-purple-50 text-purple-700 border-purple-200'
-    : 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+    ? 'bg-purple-50 text-purple-800 border-purple-200 font-semibold'
+    : 'bg-purple-950/60 text-purple-300 border-purple-800 font-semibold';
 
-  const genderText = isMale ? 'ชาย ♂' : isFemale ? 'หญิง ♀' : 'ไม่ระบุ';
-  const genderWithAge = age !== null ? `${genderText} (${age} ปี)` : genderText;
+  const subBadgeColor = isLight
+    ? 'bg-slate-50 text-slate-700 border-slate-200'
+    : 'bg-slate-800/60 text-slate-300 border-slate-700';
+
   const avatarImage = data.images && data.images.length > 0 ? data.images[0].url : null;
 
   // COMPACT VIEW RENDER
@@ -127,20 +149,29 @@ const CustomPersonNodeComponent = ({
           className="!h-2.5 !w-2.5 !border-2 !border-slate-900 !bg-rose-500 !opacity-0 group-hover:!opacity-100"
         />
 
-        {/* Avatar */}
-        {avatarImage ? (
-          <img
-            src={avatarImage}
-            alt={data.name}
-            className={`h-9 w-9 shrink-0 rounded-lg object-cover border ${
-              isLight ? 'border-slate-200' : 'border-slate-700'
-            }`}
-          />
-        ) : (
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${badgeColor}`}>
-            <User className="h-5 w-5" />
-          </div>
-        )}
+        {/* Avatar with Deceased Red Cross Overlay */}
+        <div className="relative shrink-0">
+          {avatarImage ? (
+            <img
+              src={avatarImage}
+              alt={data.name}
+              className={`h-9 w-9 shrink-0 rounded-lg object-cover border ${
+                isDeceased ? 'filter grayscale opacity-75' : ''
+              } ${isLight ? 'border-slate-200' : 'border-slate-700'}`}
+            />
+          ) : (
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${badgeColor}`}>
+              <User className="h-5 w-5" />
+            </div>
+          )}
+          {isDeceased && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 backdrop-blur-[0.5px]">
+              <span className="text-rose-500 font-extrabold text-base leading-none select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                ❌
+              </span>
+            </div>
+          )}
+        </div>
 
         <div className="overflow-hidden">
           <h3
@@ -149,9 +180,11 @@ const CustomPersonNodeComponent = ({
           >
             {data.name}
           </h3>
-          <span className={`inline-block rounded px-1 py-0.2 text-[9px] font-semibold border mt-0.5 ${badgeColor}`}>
-            {genderWithAge}
-          </span>
+          {age !== null && (
+            <span className={`inline-block rounded px-1 py-0.2 text-[9px] font-semibold border mt-0.5 ${badgeColor}`}>
+              {age} ปี
+            </span>
+          )}
         </div>
       </div>
     );
@@ -209,19 +242,29 @@ const CustomPersonNodeComponent = ({
       {/* Person Header */}
       <div className="flex items-start justify-between gap-2.5 mb-2">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          {avatarImage ? (
-            <img
-              src={avatarImage}
-              alt={data.name}
-              className={`h-10 w-10 shrink-0 rounded-xl object-cover border shadow ${
-                isLight ? 'border-slate-200' : 'border-slate-700'
-              }`}
-            />
-          ) : (
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${badgeColor}`}>
-              <User className="h-5 w-5" />
-            </div>
-          )}
+          {/* Avatar with Deceased Red Cross Overlay */}
+          <div className="relative shrink-0">
+            {avatarImage ? (
+              <img
+                src={avatarImage}
+                alt={data.name}
+                className={`h-10 w-10 shrink-0 rounded-xl object-cover border shadow ${
+                  isDeceased ? 'filter grayscale opacity-75' : ''
+                } ${isLight ? 'border-slate-200' : 'border-slate-700'}`}
+              />
+            ) : (
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${badgeColor}`}>
+                <User className="h-5 w-5" />
+              </div>
+            )}
+            {isDeceased && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 backdrop-blur-[0.5px]">
+                <span className="text-rose-500 font-extrabold text-xl leading-none select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  ❌
+                </span>
+              </div>
+            )}
+          </div>
           <div className="overflow-hidden">
             <h3
               className={`truncate font-bold text-sm ${isLight ? 'text-slate-900' : 'text-slate-100'}`}
@@ -229,23 +272,19 @@ const CustomPersonNodeComponent = ({
             >
               {data.name}
             </h3>
-            <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold border ${badgeColor}`}>
-              {genderWithAge}
-            </span>
+            {age !== null && (
+              <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold border mt-0.5 ${badgeColor}`}>
+                อายุ {age} ปี
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {/* Birth Date */}
       {formattedBirthDate && (
-        <div
-          className={`flex items-center gap-1.5 text-xs font-medium mb-2 px-2 py-1 rounded-md border ${
-            isLight
-              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-              : 'bg-indigo-950/40 text-indigo-300 border-indigo-900/40'
-          }`}
-        >
-          <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+        <div className={`flex items-center gap-1.5 text-xs font-medium mb-2 px-2 py-1 rounded-md border ${subBadgeColor}`}>
+          <Calendar className="h-3.5 w-3.5 opacity-80" />
           <span className="text-[11px]">เกิด: {formattedBirthDate}</span>
         </div>
       )}
@@ -254,13 +293,13 @@ const CustomPersonNodeComponent = ({
       {data.description ? (
         <p
           className={`line-clamp-2 text-xs mb-3 leading-relaxed ${
-            isLight ? 'text-slate-600' : 'text-slate-400'
+            isLight ? 'text-slate-700' : 'text-slate-300'
           }`}
         >
           {data.description}
         </p>
       ) : (
-        <p className={`text-xs italic mb-3 ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+        <p className={`text-xs italic mb-3 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
           ไม่มีข้อมูลประวัติ
         </p>
       )}
@@ -268,27 +307,21 @@ const CustomPersonNodeComponent = ({
       {/* Footer */}
       <div
         className={`flex items-center justify-between pt-2 border-t text-xs ${
-          isLight ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'
+          isLight ? 'border-slate-300/60 text-slate-600' : 'border-slate-700/60 text-slate-300'
         }`}
       >
         <div className="flex items-center gap-1">
-          <FileText className={`h-3.5 w-3.5 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
+          <FileText className={`h-3.5 w-3.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`} />
           <span className="text-[11px]">คลิกดูประวัติ</span>
         </div>
 
         {imageCount > 0 ? (
-          <div
-            className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium text-[11px] border ${
-              isLight
-                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                : 'bg-indigo-950/80 text-indigo-300 border-indigo-800/40'
-            }`}
-          >
-            <ImageIcon className="h-3 w-3" />
+          <div className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium text-[11px] border ${subBadgeColor}`}>
+            <ImageIcon className="h-3 w-3 opacity-80" />
             <span>{imageCount}/3 รูป</span>
           </div>
         ) : (
-          <span className="text-[11px] text-slate-400">0/3 รูป</span>
+          <span className="text-[11px] opacity-60">0/3 รูป</span>
         )}
       </div>
 

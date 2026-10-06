@@ -217,18 +217,112 @@ const getElkTreeLayout = (
   return { nodes: layoutedNodes, edges };
 };
 
+// Calculates relative handle positions (top, bottom, left, right) based on source & target node centers
+export function getRelativeHandleIds(
+  sourceNode: Node,
+  targetNode: Node,
+  layoutMode: LayoutMode = 'elk_vertical'
+): { sourceHandle: string; targetHandle: string } {
+  const isUnionSource = sourceNode.type === 'unionNode';
+  const isUnionTarget = targetNode.type === 'unionNode';
+
+  const sourceW = isUnionSource ? 34 : 220;
+  const sourceH = isUnionSource ? 34 : 100;
+  const targetW = isUnionTarget ? 34 : 220;
+  const targetH = isUnionTarget ? 34 : 100;
+
+  const sourceCenterX = (sourceNode.position?.x ?? 0) + sourceW / 2;
+  const sourceCenterY = (sourceNode.position?.y ?? 0) + sourceH / 2;
+  const targetCenterX = (targetNode.position?.x ?? 0) + targetW / 2;
+  const targetCenterY = (targetNode.position?.y ?? 0) + targetH / 2;
+
+  const dx = targetCenterX - sourceCenterX;
+  const dy = targetCenterY - sourceCenterY;
+
+  let sourceSide: 'top' | 'bottom' | 'left' | 'right' = 'bottom';
+  let targetSide: 'top' | 'bottom' | 'left' | 'right' = 'top';
+
+  if (layoutMode === 'elk_horizontal') {
+    if (Math.abs(dx) >= Math.abs(dy) * 0.5) {
+      if (dx >= 0) {
+        sourceSide = 'right';
+        targetSide = 'left';
+      } else {
+        sourceSide = 'left';
+        targetSide = 'right';
+      }
+    } else {
+      if (dy >= 0) {
+        sourceSide = 'bottom';
+        targetSide = 'top';
+      } else {
+        sourceSide = 'top';
+        targetSide = 'bottom';
+      }
+    }
+  } else {
+    if (Math.abs(dy) >= Math.abs(dx) * 0.5) {
+      if (dy >= 0) {
+        sourceSide = 'bottom';
+        targetSide = 'top';
+      } else {
+        sourceSide = 'top';
+        targetSide = 'bottom';
+      }
+    } else {
+      if (dx >= 0) {
+        sourceSide = 'right';
+        targetSide = 'left';
+      } else {
+        sourceSide = 'left';
+        targetSide = 'right';
+      }
+    }
+  }
+
+  const sourceHandle = isUnionSource ? `union-${sourceSide}-source` : `${sourceSide}-source`;
+  const targetHandle = isUnionTarget ? `union-${targetSide}-target` : `${targetSide}-target`;
+
+  return { sourceHandle, targetHandle };
+}
+
 const getLayoutedElements = (
   nodes: Node[],
   edges: Edge[],
   layoutMode: LayoutMode = 'elk_vertical',
   isCompact = false
 ) => {
-  if (layoutMode === 'free_graph') {
-    return { nodes, edges };
+  let layoutResult = { nodes, edges };
+  if (layoutMode !== 'free_graph') {
+    const direction = layoutMode === 'elk_horizontal' ? 'LR' : 'TB';
+    layoutResult = getElkTreeLayout(nodes, edges, direction, isCompact);
   }
 
-  const direction = layoutMode === 'elk_horizontal' ? 'LR' : 'TB';
-  return getElkTreeLayout(nodes, edges, direction, isCompact);
+  const nodeMap = new Map<string, Node>(layoutResult.nodes.map((n) => [n.id, n]));
+  const updatedEdges = layoutResult.edges.map((edge) => {
+    const sourceNode = nodeMap.get(edge.source);
+    const targetNode = nodeMap.get(edge.target);
+
+    let defaultSourceHandle = 'bottom-source';
+    let defaultTargetHandle = 'top-target';
+
+    if (layoutMode === 'elk_horizontal') {
+      defaultSourceHandle = 'right-source';
+      defaultTargetHandle = 'left-target';
+    } else if (layoutMode === 'free_graph' && sourceNode && targetNode) {
+      const rel = getRelativeHandleIds(sourceNode, targetNode, layoutMode);
+      defaultSourceHandle = rel.sourceHandle;
+      defaultTargetHandle = rel.targetHandle;
+    }
+
+    return {
+      ...edge,
+      sourceHandle: edge.sourceHandle || defaultSourceHandle,
+      targetHandle: edge.targetHandle || defaultTargetHandle,
+    };
+  });
+
+  return { nodes: layoutResult.nodes, edges: updatedEdges };
 };
 
 function NodeDiagramInner({
@@ -250,8 +344,8 @@ function NodeDiagramInner({
 
   const [currentZoomLevel, setCurrentZoomLevel] = useState<number>(1);
 
-  // Flexible Edge Routing state: 'step' (Orthogonal 90° lines) or 'straight' (Straight lines)
-  const [edgeRouting, setEdgeRouting] = useState<EdgeRoutingType>('step');
+  // Flexible Edge Routing state: 'straight' (Straight lines) or 'step' (Orthogonal 90° lines)
+  const [edgeRouting, setEdgeRouting] = useState<EdgeRoutingType>('straight');
 
   // Toggle state for Top-Left Control Panel
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
@@ -275,6 +369,7 @@ function NodeDiagramInner({
           gender: p.gender || 'MALE',
           description: p.description,
           birthDate: p.birthDate,
+          isDeceased: Boolean(p.isDeceased),
           images: p.images,
           isCompact: isCompactView,
           layoutMode: layoutMode,
@@ -288,78 +383,73 @@ function NodeDiagramInner({
       });
     });
 
-    const defaultEdgeType = edgeRouting; // 'step' for 90° orthogonal, 'straight' for direct lines
-    const childEdgeStroke = isLight ? '#10b981' : '#34d399'; // Emerald green stroke for ELK tree connections
+    const defaultEdgeType = edgeRouting; // Default 'straight' for direct parent-child connections
+    const directEdgeStroke = isLight ? '#10b981' : '#34d399'; // Emerald green stroke for parent-child connections
+    const defaultSourceHandle = layoutMode === 'elk_horizontal' ? 'right-source' : 'bottom-source';
+    const defaultTargetHandle = layoutMode === 'elk_horizontal' ? 'left-target' : 'top-target';
 
-    // 2. Marriage Union Junction Nodes & Edges
+    // 2. Direct Parent-to-Child Edges (Straight Lines, Directional Handles)
     rawUnions.forEach((u) => {
-      const unionNodeId = `union-${u.id}`;
-      const childCount = u.children ? u.children.length : 0;
-
-      nodes.push({
-        id: unionNodeId,
-        type: 'unionNode',
-        data: {
-          id: unionNodeId,
-          rawUnionId: u.id,
-          childCount,
-          isCollapsed: false,
-          theme: theme,
-        } as UnionNodeData,
-        position: { x: 0, y: 0 },
-      });
-
-      // MARRIAGE EDGES (RED `#ef4444`)
-      if (u.partner1Id) {
-        edges.push({
-          id: `e-${u.partner1Id}-${unionNodeId}`,
-          source: u.partner1Id,
-          target: unionNodeId,
-          type: defaultEdgeType,
-          reconnectable: true,
-          style: { stroke: '#ef4444', strokeWidth: 2.5 },
-        });
-      }
-
-      if (u.partner2Id) {
-        edges.push({
-          id: `e-${u.partner2Id}-${unionNodeId}`,
-          source: u.partner2Id,
-          target: unionNodeId,
-          type: defaultEdgeType,
-          reconnectable: true,
-          style: { stroke: '#ef4444', strokeWidth: 2.5 },
-        });
-      }
-
-      // PARENT-TO-CHILD EDGES (GREEN/EMERALD STEP OR STRAIGHT)
       if (u.children && u.children.length > 0) {
         u.children.forEach((child: any) => {
-          edges.push({
-            id: `e-${unionNodeId}-${child.id}`,
-            source: unionNodeId,
-            target: child.id,
-            type: defaultEdgeType,
-            reconnectable: true,
-            style: { stroke: childEdgeStroke, strokeWidth: 2.5 },
-          });
+          // Connect Partner 1 (e.g. Father) directly to Child
+          if (u.partner1Id) {
+            const edgeId = `e-${u.partner1Id}-${child.id}`;
+            if (!edges.some((e) => e.id === edgeId)) {
+              edges.push({
+                id: edgeId,
+                source: u.partner1Id,
+                target: child.id,
+                sourceHandle: defaultSourceHandle,
+                targetHandle: defaultTargetHandle,
+                type: defaultEdgeType,
+                reconnectable: true,
+                style: { stroke: directEdgeStroke, strokeWidth: 2.5 },
+              });
+            }
+          }
+
+          // Connect Partner 2 (e.g. Mother) directly to Child
+          if (u.partner2Id) {
+            const edgeId = `e-${u.partner2Id}-${child.id}`;
+            if (!edges.some((e) => e.id === edgeId)) {
+              edges.push({
+                id: edgeId,
+                source: u.partner2Id,
+                target: child.id,
+                sourceHandle: defaultSourceHandle,
+                targetHandle: defaultTargetHandle,
+                type: defaultEdgeType,
+                reconnectable: true,
+                style: { stroke: directEdgeStroke, strokeWidth: 2.5 },
+              });
+            }
+          }
         });
       }
     });
 
-    // 3. Fallback direct relation
+    // 3. Fallback Direct Parent-Child Relation
     rawPersons.forEach((p) => {
       if (p.parentUnionId) {
-        const unionNodeId = `union-${p.parentUnionId}`;
-        const edgeExists = edges.some((e) => e.source === unionNodeId && e.target === p.id);
-        if (!edgeExists) {
-          edges.push({
-            id: `e-${unionNodeId}-${p.id}`,
-            source: unionNodeId,
-            target: p.id,
-            type: defaultEdgeType,
-            reconnectable: true,
-            style: { stroke: childEdgeStroke, strokeWidth: 2.5 },
+        const parentUnion = rawUnions.find((u) => u.id === p.parentUnionId);
+        if (parentUnion) {
+          [parentUnion.partner1Id, parentUnion.partner2Id].forEach((parentPersonId) => {
+            if (parentPersonId) {
+              const edgeId = `e-${parentPersonId}-${p.id}`;
+              if (!edges.some((e) => e.id === edgeId)) {
+                edges.push({
+                  id: edgeId,
+                  source: parentPersonId,
+                  target: p.id,
+                  sourceHandle: defaultSourceHandle,
+                  targetHandle: defaultTargetHandle,
+                  type: defaultEdgeType,
+                  reconnectable: true,
+                  style: { stroke: directEdgeStroke, strokeWidth: 2.5 },
+                });
+              }
+            }
           });
         }
       }
@@ -379,7 +469,7 @@ function NodeDiagramInner({
   ]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges as Edge[]);
 
   React.useEffect(() => {
     setNodes(initialNodes);
@@ -467,8 +557,11 @@ function NodeDiagramInner({
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.15}
         maxZoom={2.0}
-        selectionOnDrag={true}
-        panOnDrag={[1, 2]}
+        panOnDrag={true}
+        panOnScroll={false}
+        zoomOnScroll={true}
+        zoomOnPinch={true}
+        selectionOnDrag={false}
         selectionMode={SelectionMode.Partial}
         defaultEdgeOptions={{
           type: edgeRouting,

@@ -27,15 +27,23 @@ interface PersonDetail {
   gender: string;
   description?: string | null;
   birthDate?: string | null;
+  isDeceased?: boolean;
   images: NodeImage[];
   unionsAsPartner1?: any[];
   unionsAsPartner2?: any[];
   parentUnion?: any;
 }
 
+interface SimplePerson {
+  id: string;
+  name: string;
+  gender: string;
+}
+
 interface NodeModalProps {
   nodeId: string | null;
   theme?: 'dark' | 'light';
+  allPersons?: SimplePerson[];
   onClose: () => void;
   onRefresh: () => void;
   onOpenAddNode: (
@@ -48,6 +56,7 @@ interface NodeModalProps {
 export function NodeModal({
   nodeId,
   theme = 'dark',
+  allPersons = [],
   onClose,
   onRefresh,
   onOpenAddNode,
@@ -60,6 +69,9 @@ export function NodeModal({
   const [gender, setGender] = useState('MALE');
   const [birthDate, setBirthDate] = useState('');
   const [description, setDescription] = useState('');
+  const [isDeceased, setIsDeceased] = useState(false);
+  const [parentPersonId, setParentPersonId] = useState<string>('');
+  const [addChildId, setAddChildId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -80,6 +92,13 @@ export function NodeModal({
           setGender(data.person.gender || 'MALE');
           setBirthDate(data.person.birthDate || '');
           setDescription(data.person.description || '');
+          setIsDeceased(Boolean(data.person.isDeceased));
+          
+          const currentParentId =
+            data.person.parentUnion?.partner1?.id ||
+            data.person.parentUnion?.partner2?.id ||
+            '';
+          setParentPersonId(currentParentId);
         } else {
           setError(data.error || 'ไม่สามารถดึงข้อมูลบุคคลได้');
         }
@@ -107,13 +126,20 @@ export function NodeModal({
       const res = await fetch(`/api/nodes/${nodeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, gender, birthDate, description }),
+        body: JSON.stringify({
+          name,
+          gender,
+          birthDate,
+          description,
+          isDeceased,
+          parentPersonId,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
         setPerson(data.person);
         setIsEditing(false);
-        setSuccessMsg('บันทึกข้อมูลเรียบร้อยแล้ว');
+        setSuccessMsg('บันทึกข้อมูลและสายสัมพันธ์เรียบร้อยแล้ว');
         setTimeout(() => setSuccessMsg(null), 3000);
         onRefresh();
       } else {
@@ -383,6 +409,42 @@ export function NodeModal({
                       </div>
                     </div>
 
+                    {/* Life Status Selection in Edit Mode */}
+                    <div>
+                      <label className={`block text-xs font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                        สถานะชีวิต
+                      </label>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setIsDeceased(false)}
+                          className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-xs font-semibold transition-all ${
+                            !isDeceased
+                              ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500 shadow-sm'
+                              : isLight
+                              ? 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                              : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span>🌱 มีชีวิตอยู่</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsDeceased(true)}
+                          className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-xs font-semibold transition-all ${
+                            isDeceased
+                              ? 'bg-rose-500/15 border-rose-500 text-rose-500 shadow-sm'
+                              : isLight
+                              ? 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                              : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span>❌ เสียชีวิต</span>
+                        </button>
+                      </div>
+                    </div>
+
                     <div>
                       <label className={`block text-xs font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                         ประวัติ / คำอธิบายเพิ่มเติม
@@ -398,6 +460,36 @@ export function NodeModal({
                         }`}
                       />
                     </div>
+
+                    {/* Parent Node Selection in Edit Mode */}
+                    {allPersons.length > 0 && (
+                      <div className="pt-2 border-t border-dashed border-slate-700/50">
+                        <label className={`block text-xs font-semibold mb-1 ${isLight ? 'text-slate-700' : 'text-indigo-400'}`}>
+                          แก้ไข บิดา / มารดา (Parent Node)
+                        </label>
+                        <select
+                          value={parentPersonId}
+                          onChange={(e) => setParentPersonId(e.target.value)}
+                          className={`w-full rounded-lg border px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none ${
+                            isLight
+                              ? 'bg-white border-slate-300 text-slate-800'
+                              : 'bg-slate-900 border-slate-700 text-slate-100'
+                          }`}
+                        >
+                          <option value="">-- ไม่ระบุ (ไม่มีบุพการี / เป็นต้นตระกูล) --</option>
+                          {allPersons
+                            .filter((p) => p.id !== nodeId)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.gender === 'MALE' ? 'ชาย ♂' : p.gender === 'FEMALE' ? 'หญิง ♀' : 'ไม่ระบุ'})
+                              </option>
+                            ))}
+                        </select>
+                        <p className={`text-[11px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          * ระบบจะตรวจสอบอัตโนมัติเพื่อป้องกันไม่ให้เกิดวงวนซ้ำ (Circular Reference)
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -408,7 +500,37 @@ export function NodeModal({
                       <span className={`rounded-md px-2 py-0.5 text-xs font-semibold border ${genderBadge.color}`}>
                         {genderBadge.text}
                       </span>
+                      {person.isDeceased ? (
+                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30">
+                          ❌ เสียชีวิต
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                          🌱 มีชีวิตอยู่
+                        </span>
+                      )}
                     </div>
+
+                    {/* Parent Info in View Mode */}
+                    {person.parentUnion && (
+                      <div className="flex items-center gap-1.5 text-xs font-semibold flex-wrap pt-1">
+                        <span className={isLight ? 'text-slate-600' : 'text-slate-400'}>บิดา/มารดา (Parent):</span>
+                        {[person.parentUnion.partner1, person.parentUnion.partner2]
+                          .filter(Boolean)
+                          .map((parent: any) => (
+                            <span
+                              key={parent.id}
+                              className={`inline-block rounded-md px-2 py-0.5 border text-xs font-semibold ${
+                                isLight
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                  : 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
+                              }`}
+                            >
+                              {parent.name}
+                            </span>
+                          ))}
+                      </div>
+                    )}
 
                     {formattedBirthDate && (
                       <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-medium">

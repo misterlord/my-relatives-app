@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       gender = 'MALE',
       description,
       birthDate,
+      isDeceased = false,
       relationshipType = 'child', // 'child' | 'spouse' | 'parent' | 'standalone'
       referencePersonId,
       existingUnionId,
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
         gender,
         description: description?.trim() || null,
         birthDate: birthDate?.trim() || null,
+        isDeceased: Boolean(isDeceased),
         parentUnionId: targetParentUnionId,
       },
       include: { images: true, parentUnion: true },

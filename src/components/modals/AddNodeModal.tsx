@@ -33,6 +33,7 @@ export function AddNodeModal({
   const [gender, setGender] = useState<string>('MALE');
   const [birthDate, setBirthDate] = useState<string>('');
   const [description, setDescription] = useState('');
+  const [isDeceased, setIsDeceased] = useState(false);
   const [referencePersonId, setReferencePersonId] = useState<string>('');
   const [relationshipType, setRelationshipType] = useState<'child' | 'spouse' | 'parent'>('child');
   const [loading, setLoading] = useState(false);
@@ -44,6 +45,7 @@ export function AddNodeModal({
       setGender('MALE');
       setBirthDate('');
       setDescription('');
+      setIsDeceased(false);
       setError(null);
       setReferencePersonId(initialReferencePersonId || (allPersons.length > 0 ? allPersons[0].id : ''));
       setRelationshipType(initialRelationshipType || 'child');
@@ -72,6 +74,7 @@ export function AddNodeModal({
           gender,
           birthDate: birthDate || undefined,
           description: description.trim() || undefined,
+          isDeceased,
           relationshipType,
           referencePersonId: referencePersonId || undefined,
         }),
@@ -187,6 +190,42 @@ export function AddNodeModal({
                   }`}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Life Status (Alive / Deceased) */}
+          <div>
+            <label className={`block text-xs font-medium mb-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+              สถานะชีวิต
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeceased(false)}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition-all ${
+                  !isDeceased
+                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500 shadow-sm'
+                    : isLight
+                    ? 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                <span>🌱 มีชีวิตอยู่</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDeceased(true)}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition-all ${
+                  isDeceased
+                    ? 'bg-rose-500/15 border-rose-500 text-rose-500 shadow-sm'
+                    : isLight
+                    ? 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                <span>❌ เสียชีวิต</span>
+              </button>
             </div>
           </div>
 

@@ -295,7 +295,7 @@ export default function DashboardPage() {
                     <div
                       className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
                         p.gender === 'FEMALE'
-                          ? 'bg-emerald-500/20 text-emerald-600 border border-emerald-500/30'
+                          ? 'bg-pink-500/20 text-pink-600 border border-pink-500/30'
                           : 'bg-blue-500/20 text-blue-600 border border-blue-500/30'
                       }`}
                     >
@@ -484,6 +484,7 @@ export default function DashboardPage() {
       <NodeModal
         nodeId={selectedNodeId}
         theme={theme}
+        allPersons={persons.map((p) => ({ id: p.id, name: p.name, gender: p.gender }))}
         onClose={() => setSelectedNodeId(null)}
         onRefresh={fetchFamilyTree}
         onOpenAddNode={(refId, relType) => handleOpenAddNodeModal(refId, relType)}

@@ -20,6 +20,7 @@ interface TreeNode {
   gender: string;
   birthDate?: string | null;
   description?: string | null;
+  isDeceased?: boolean;
   spouseName?: string | null;
   children: TreeNode[];
   isFolder: boolean;
@@ -101,6 +102,7 @@ function buildFamilyTreeNodes(persons: any[], unions: any[]): TreeNode[] {
       gender: person.gender || 'MALE',
       birthDate: person.birthDate,
       description: person.description,
+      isDeceased: Boolean(person.isDeceased),
       spouseName: spouseNames.length > 0 ? spouseNames.join(', ') : null,
       children: childNodes,
       isFolder,
@@ -222,12 +224,19 @@ const TreeNodeRow = ({
               isMale
                 ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
                 : isFemale
-                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                ? 'bg-pink-500/10 text-pink-500 border-pink-500/30'
                 : 'bg-purple-500/10 text-purple-500 border-purple-500/30'
             }`}
           >
             {isMale ? 'ชาย ♂' : isFemale ? 'หญิง ♀' : 'ไม่ระบุ'}
           </span>
+
+          {/* Deceased Status Tag */}
+          {node.isDeceased && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded border bg-rose-500/15 text-rose-500 border-rose-500/30 shrink-0">
+              ❌ เสียชีวิต
+            </span>
+          )}
 
           {/* Spouse Tag */}
           {node.spouseName && (
@@ -446,7 +455,7 @@ export function TreeViewReportModal({
             <span className="rounded-lg bg-blue-500/10 border border-blue-500/30 px-2 py-1 font-semibold text-blue-400">
               ชาย: {maleCount}
             </span>
-            <span className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 font-semibold text-emerald-400">
+            <span className="rounded-lg bg-pink-500/10 border border-pink-500/30 px-2 py-1 font-semibold text-pink-400">
               หญิง: {femaleCount}
             </span>
           </div>
