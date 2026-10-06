@@ -35,6 +35,7 @@ interface PersonDetail {
 
 interface NodeModalProps {
   nodeId: string | null;
+  theme?: 'dark' | 'light';
   onClose: () => void;
   onRefresh: () => void;
   onOpenAddNode: (
@@ -44,7 +45,14 @@ interface NodeModalProps {
   ) => void;
 }
 
-export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeModalProps) {
+export function NodeModal({
+  nodeId,
+  theme = 'dark',
+  onClose,
+  onRefresh,
+  onOpenAddNode,
+}: NodeModalProps) {
+  const isLight = theme === 'light';
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -209,28 +217,57 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
 
   const genderBadge =
     person?.gender === 'MALE'
-      ? { text: age !== null ? `ชาย ♂ (อายุ ${age} ปี)` : 'ชาย ♂', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' }
+      ? {
+          text: age !== null ? `ชาย ♂ (อายุ ${age} ปี)` : 'ชาย ♂',
+          color: isLight
+            ? 'bg-blue-50 text-blue-700 border-blue-200'
+            : 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+        }
       : person?.gender === 'FEMALE'
-      ? { text: age !== null ? `หญิง ♀ (อายุ ${age} ปี)` : 'หญิง ♀', color: 'bg-pink-500/10 text-pink-400 border-pink-500/30' }
-      : { text: age !== null ? `ไม่ระบุ (อายุ ${age} ปี)` : 'ไม่ระบุ', color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' };
+      ? {
+          text: age !== null ? `หญิง ♀ (อายุ ${age} ปี)` : 'หญิง ♀',
+          color: isLight
+            ? 'bg-pink-50 text-pink-700 border-pink-200'
+            : 'bg-pink-500/10 text-pink-400 border-pink-500/30',
+        }
+      : {
+          text: age !== null ? `ไม่ระบุ (อายุ ${age} ปี)` : 'ไม่ระบุ',
+          color: isLight
+            ? 'bg-purple-50 text-purple-700 border-purple-200'
+            : 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+        };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-sm p-4 sm:p-6 transition-all">
-      <div className="relative flex h-full w-full max-w-xl flex-col rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl text-slate-100 overflow-hidden">
+      <div
+        className={`relative flex h-full w-full max-w-xl flex-col rounded-2xl border shadow-2xl overflow-hidden ${
+          isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-slate-900 border-slate-800 text-slate-100'
+        }`}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950/50">
+        <div
+          className={`flex items-center justify-between border-b px-6 py-4 ${
+            isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-950/50'
+          }`}
+        >
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
               <User className="h-5 w-5" />
             </div>
             <div>
               <h2 className="font-semibold text-lg leading-tight">ข้อมูลบุคคลในผังตระกูล</h2>
-              <p className="text-xs text-slate-400">ID: {nodeId}</p>
+              <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                ID: {nodeId}
+              </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+            className={`rounded-lg p-2 transition-colors ${
+              isLight
+                ? 'text-slate-500 hover:bg-slate-200 hover:text-slate-900'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+            }`}
           >
             <X className="h-5 w-5" />
           </button>
@@ -239,15 +276,15 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {error && (
-            <div className="flex items-center gap-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 text-sm text-rose-300">
-              <AlertCircle className="h-5 w-5 shrink-0 text-rose-400" />
+            <div className="flex items-center gap-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 text-sm text-rose-500">
+              <AlertCircle className="h-5 w-5 shrink-0 text-rose-500" />
               <span>{error}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="flex items-center gap-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-sm text-emerald-300">
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+            <div className="flex items-center gap-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-sm text-emerald-600">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
               <span>{successMsg}</span>
             </div>
           )}
@@ -259,15 +296,19 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
           ) : person ? (
             <>
               {/* Person Info Section */}
-              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+              <div
+                className={`space-y-4 rounded-xl border p-5 ${
+                  isLight ? 'border-slate-200 bg-slate-50/50' : 'border-slate-800 bg-slate-950/40'
+                }`}
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-indigo-500">
                     ประวัติส่วนบุคคล
                   </span>
                   {!isEditing ? (
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="flex items-center gap-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
+                      className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
                     >
                       <Edit2 className="h-3.5 w-3.5" /> แก้ไขประวัติ / วันเกิด
                     </button>
@@ -275,7 +316,7 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setIsEditing(false)}
-                        className="text-xs text-slate-400 hover:text-slate-200"
+                        className={`text-xs ${isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}
                       >
                         ยกเลิก
                       </button>
@@ -292,24 +333,32 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
                 {isEditing ? (
                   <div className="space-y-3 pt-2">
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                      <label className={`block text-xs font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                         ชื่อ-นามสกุล <span className="text-rose-400">*</span>
                       </label>
                       <input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                        className={`w-full rounded-lg border px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none ${
+                          isLight
+                            ? 'bg-white border-slate-300 text-slate-800'
+                            : 'bg-slate-900 border-slate-700 text-slate-100'
+                        }`}
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1">เพศ</label>
+                        <label className={`block text-xs font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>เพศ</label>
                         <select
                           value={gender}
                           onChange={(e) => setGender(e.target.value)}
-                          className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                          className={`w-full rounded-lg border px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none ${
+                            isLight
+                              ? 'bg-white border-slate-300 text-slate-800'
+                              : 'bg-slate-900 border-slate-700 text-slate-100'
+                          }`}
                         >
                           <option value="MALE">ชาย ♂</option>
                           <option value="FEMALE">หญิง ♀</option>
@@ -318,47 +367,57 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1">
+                        <label className={`block text-xs font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                           วัน เดือน ปีเกิด
                         </label>
                         <input
                           type="date"
                           value={birthDate}
                           onChange={(e) => setBirthDate(e.target.value)}
-                          className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                          className={`w-full rounded-lg border px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none ${
+                            isLight
+                              ? 'bg-white border-slate-300 text-slate-800'
+                              : 'bg-slate-900 border-slate-700 text-slate-100'
+                          }`}
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                      <label className={`block text-xs font-medium mb-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                         ประวัติ / คำอธิบายเพิ่มเติม
                       </label>
                       <textarea
                         rows={3}
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3.5 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                        className={`w-full rounded-lg border px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none ${
+                          isLight
+                            ? 'bg-white border-slate-300 text-slate-800'
+                            : 'bg-slate-900 border-slate-700 text-slate-100'
+                        }`}
                       />
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-xl font-bold text-slate-100">{person.name}</h3>
+                      <h3 className={`text-xl font-bold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                        {person.name}
+                      </h3>
                       <span className={`rounded-md px-2 py-0.5 text-xs font-semibold border ${genderBadge.color}`}>
                         {genderBadge.text}
                       </span>
                     </div>
 
                     {formattedBirthDate && (
-                      <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-medium">
-                        <Calendar className="h-3.5 w-3.5 text-indigo-400" />
+                      <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-medium">
+                        <Calendar className="h-3.5 w-3.5 text-indigo-500" />
                         <span>วันเกิด: {formattedBirthDate}</span>
                       </div>
                     )}
 
-                    <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line pt-1">
+                    <p className={`text-sm leading-relaxed whitespace-pre-line pt-1 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                       {person.description || 'ไม่มีข้อมูลรายละเอียดเพิ่มเติม'}
                     </p>
                   </div>
@@ -366,18 +425,26 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
               </div>
 
               {/* Photos Gallery (Max 3 Images) */}
-              <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+              <div
+                className={`space-y-3 rounded-xl border p-5 ${
+                  isLight ? 'border-slate-200 bg-slate-50/50' : 'border-slate-800 bg-slate-950/40'
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4 text-indigo-400" />
-                    <span className="text-sm font-semibold text-slate-200">รูปภาพประกอบ</span>
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-indigo-300 border border-slate-700">
+                    <ImageIcon className="h-4 w-4 text-indigo-500" />
+                    <span className={`text-sm font-semibold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                      รูปภาพประกอบ
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium border ${
+                      isLight ? 'bg-slate-200 text-slate-700 border-slate-300' : 'bg-slate-800 text-indigo-300 border-slate-700'
+                    }`}>
                       {person.images.length} / 3 รูป
                     </span>
                   </div>
 
                   {person.images.length < 3 && (
-                    <label className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-600/30 transition-all">
+                    <label className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-600/30 transition-all">
                       <Upload className="h-3.5 w-3.5" />
                       <span>{uploading ? 'กำลังอัปโหลด...' : 'อัปโหลดรูป'}</span>
                       <input
@@ -397,7 +464,9 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
                     {person.images.map((img) => (
                       <div
                         key={img.id}
-                        className="group relative aspect-square overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-inner"
+                        className={`group relative aspect-square overflow-hidden rounded-xl border shadow-inner ${
+                          isLight ? 'border-slate-300 bg-slate-100' : 'border-slate-700 bg-slate-900'
+                        }`}
                       >
                         <img
                           src={img.url}
@@ -416,7 +485,9 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500 py-3 text-center italic border border-dashed border-slate-800 rounded-lg">
+                  <p className={`text-xs py-3 text-center italic border border-dashed rounded-lg ${
+                    isLight ? 'border-slate-300 text-slate-500' : 'border-slate-800 text-slate-500'
+                  }`}>
                     ยังไม่มีรูปภาพประกอบ (สามารถอัปโหลดได้สูงสุด 3 รูป)
                   </p>
                 )}
@@ -424,7 +495,7 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
 
               {/* Family Connections / Actions */}
               <div className="space-y-3 pt-2">
-                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <span className={`block text-xs font-semibold uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   การจัดการสายสัมพันธ์ตระกูล
                 </span>
                 <div className="grid grid-cols-2 gap-3">
@@ -443,9 +514,13 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
                       onOpenAddNode(person.id, 'spouse');
                       onClose();
                     }}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-rose-600/20 border border-rose-500/40 text-rose-300 px-4 py-2.5 text-xs font-semibold hover:bg-rose-600/30 transition-all"
+                    className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold transition-all ${
+                      isLight
+                        ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                        : 'bg-rose-600/20 border-rose-500/40 text-rose-300 hover:bg-rose-600/30'
+                    }`}
                   >
-                    <Heart className="h-4 w-4 text-rose-400" /> เพิ่มคู่สมรส (Marriage)
+                    <Heart className="h-4 w-4 text-rose-500" /> เพิ่มคู่สมรส (Marriage)
                   </button>
                 </div>
               </div>
@@ -455,16 +530,22 @@ export function NodeModal({ nodeId, onClose, onRefresh, onOpenAddNode }: NodeMod
 
         {/* Footer */}
         {person && (
-          <div className="flex items-center justify-between border-t border-slate-800 px-6 py-4 bg-slate-950/50">
+          <div
+            className={`flex items-center justify-between border-t px-6 py-4 ${
+              isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-950/50'
+            }`}
+          >
             <button
               onClick={handleDeletePerson}
-              className="flex items-center gap-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors"
+              className="flex items-center gap-1.5 text-xs font-medium text-rose-600 hover:text-rose-500 transition-colors"
             >
               <Trash2 className="h-4 w-4" /> ลบบุคคลนี้
             </button>
             <button
               onClick={onClose}
-              className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700"
+              className={`rounded-xl px-4 py-2 text-xs font-medium transition-colors ${
+                isLight ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
             >
               ปิดหน้าต่าง
             </button>

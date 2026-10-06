@@ -19,29 +19,26 @@ import {
   SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import dagre from '@dagrejs/dagre';
 import { CustomNode, PersonNodeData } from './CustomNode';
 import { UnionNode, UnionNodeData } from './UnionNode';
 import {
-  TreeDeciduous,
-  FolderTree,
-  GitBranch,
-  Building2,
-  BrainCircuit,
-  Share2,
   GitFork,
   X,
   SlidersHorizontal,
   ChevronLeft,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  Move,
+  ArrowDown,
+  ArrowRight,
+  CornerDownRight,
+  Minus,
+  Network,
 } from 'lucide-react';
 
-export type LayoutMode =
-  | 'family_tree'
-  | 'collapsible_tree'
-  | 'dendrogram'
-  | 'org_chart'
-  | 'mind_map'
-  | 'free_graph';
+export type LayoutMode = 'elk_vertical' | 'elk_horizontal' | 'free_graph';
+export type EdgeRoutingType = 'step' | 'straight';
 
 interface NodeDiagramInnerProps {
   rawPersons: any[];
@@ -53,6 +50,7 @@ interface NodeDiagramInnerProps {
   setFocusedUnionId?: (unionId: string | null) => void;
   isCompactView?: boolean;
   focusedPersonId?: string | null;
+  theme?: 'dark' | 'light';
   onSelectNode: (id: string) => void;
   onAddNodeClick: () => void;
 }
@@ -62,153 +60,208 @@ const nodeTypes = {
   unionNode: UnionNode,
 };
 
-// Multi-Layout calculation engine
-const getLayoutedElements = (
+// Dual-Direction ELKjs Layered Subtree Layout Engine (Vertical & Horizontal)
+const getElkTreeLayout = (
   nodes: Node[],
   edges: Edge[],
-  layoutMode: LayoutMode = 'family_tree',
+  direction: 'TB' | 'LR' = 'TB',
   isCompact = false
 ) => {
-  if (layoutMode === 'free_graph') {
-    return { nodes, edges };
-  }
+  const isLR = direction === 'LR';
+  const nodeMap = new Map<string, Node>(nodes.map((n) => [n.id, n]));
+  const childrenMap = new Map<string, string[]>();
+  const parentMap = new Map<string, string[]>();
 
-  const dagreGraph = new dagre.graphlib.Graph();
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-
-  const isLR = layoutMode === 'mind_map' || layoutMode === 'dendrogram';
-  const isDendrogram = layoutMode === 'dendrogram';
-
-  dagreGraph.setGraph({
-    rankdir: isLR ? 'LR' : 'TB',
-    nodesep: isDendrogram ? 35 : isLR ? 50 : 75,
-    ranksep: isDendrogram ? 160 : isLR ? 120 : 95,
+  nodes.forEach((n) => {
+    childrenMap.set(n.id, []);
+    parentMap.set(n.id, []);
   });
 
-  nodes.forEach((node) => {
-    const isUnion = node.type === 'unionNode';
-    const width = isUnion ? 34 : isDendrogram ? 140 : isCompact ? 180 : 230;
-    const height = isUnion ? 34 : isDendrogram ? 30 : isCompact ? 70 : 120;
-    dagreGraph.setNode(node.id, { width, height });
+  edges.forEach((e) => {
+    if (childrenMap.has(e.source)) {
+      childrenMap.get(e.source)!.push(e.target);
+    }
+    if (parentMap.has(e.target)) {
+      parentMap.get(e.target)!.push(e.source);
+    }
   });
 
-  edges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target);
-  });
+  const getNodeWidth = (id: string) => {
+    const node = nodeMap.get(id);
+    if (!node) return 200;
+    return node.type === 'unionNode' ? 34 : isCompact ? 180 : 230;
+  };
 
-  dagre.layout(dagreGraph);
+  const getNodeHeight = (id: string) => {
+    const node = nodeMap.get(id);
+    if (!node) return 100;
+    return node.type === 'unionNode' ? 34 : isCompact ? 70 : 120;
+  };
 
-  const layoutedNodes = nodes.map((node) => {
-    if (node.position && (node.position.x !== 0 || node.position.y !== 0)) {
-      return node;
+  const siblingGap = isLR ? 35 : 45;
+  const levelGap = isLR ? 160 : 110;
+
+  const rootIds = nodes
+    .filter((n) => (parentMap.get(n.id) || []).length === 0)
+    .map((n) => n.id);
+
+  const subtreeSizes = new Map<string, number>();
+
+  const computeSubtreeSize = (id: string, visited = new Set<string>()): number => {
+    if (visited.has(id)) return isLR ? getNodeHeight(id) : getNodeWidth(id);
+    visited.add(id);
+
+    const children = childrenMap.get(id) || [];
+    const selfSize = isLR ? getNodeHeight(id) : getNodeWidth(id);
+
+    if (children.length === 0) {
+      subtreeSizes.set(id, selfSize);
+      return selfSize;
     }
 
-    const nodeWithPosition = dagreGraph.node(node.id);
-    const isUnion = node.type === 'unionNode';
-    const widthOffset = isUnion ? 17 : isDendrogram ? 70 : isCompact ? 90 : 115;
-    const heightOffset = isUnion ? 17 : isDendrogram ? 15 : isCompact ? 35 : 60;
+    let totalChildrenSize = 0;
+    children.forEach((cId, idx) => {
+      const cs = computeSubtreeSize(cId, visited);
+      totalChildrenSize += cs;
+      if (idx > 0) totalChildrenSize += siblingGap;
+    });
 
+    const size = Math.max(selfSize, totalChildrenSize);
+    subtreeSizes.set(id, size);
+    return size;
+  };
+
+  const visitedCompute = new Set<string>();
+  rootIds.forEach((rId) => computeSubtreeSize(rId, visitedCompute));
+
+  const nodePositions = new Map<string, { x: number; y: number }>();
+
+  const positionNode = (
+    id: string,
+    startCrossPos: number,
+    currentLevelPos: number,
+    visited = new Set<string>()
+  ) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+
+    const nodeW = getNodeWidth(id);
+    const nodeH = getNodeHeight(id);
+    const children = childrenMap.get(id) || [];
+    const selfCrossSize = isLR ? nodeH : nodeW;
+    const selfLevelSize = isLR ? nodeW : nodeH;
+
+    if (children.length === 0) {
+      const stSize = subtreeSizes.get(id) || selfCrossSize;
+      const crossPos = startCrossPos + (stSize - selfCrossSize) / 2;
+      nodePositions.set(id, isLR ? { x: currentLevelPos, y: crossPos } : { x: crossPos, y: currentLevelPos });
+      return;
+    }
+
+    const stSize = subtreeSizes.get(id) || selfCrossSize;
+    let childCrossPos = startCrossPos;
+    const nextLevelPos = currentLevelPos + selfLevelSize + levelGap;
+
+    children.forEach((cId) => {
+      const cs = subtreeSizes.get(cId) || (isLR ? getNodeHeight(cId) : getNodeWidth(cId));
+      positionNode(cId, childCrossPos, nextLevelPos, visited);
+      childCrossPos += cs + siblingGap;
+    });
+
+    const firstChildPos = nodePositions.get(children[0]);
+    const lastChildPos = nodePositions.get(children[children.length - 1]);
+
+    if (firstChildPos && lastChildPos) {
+      const firstCross = isLR ? firstChildPos.y : firstChildPos.x;
+      const lastCross = isLR ? lastChildPos.y : lastChildPos.x;
+      const firstCrossSize = isLR ? getNodeHeight(children[0]) : getNodeWidth(children[0]);
+      const lastCrossSize = isLR ? getNodeHeight(children[children.length - 1]) : getNodeWidth(children[children.length - 1]);
+
+      const centerFirst = firstCross + firstCrossSize / 2;
+      const centerLast = lastCross + lastCrossSize / 2;
+
+      const parentCenterCross = (centerFirst + centerLast) / 2;
+      const crossPos = parentCenterCross - selfCrossSize / 2;
+
+      nodePositions.set(id, isLR ? { x: currentLevelPos, y: crossPos } : { x: crossPos, y: currentLevelPos });
+    } else {
+      const crossPos = startCrossPos + (stSize - selfCrossSize) / 2;
+      nodePositions.set(id, isLR ? { x: currentLevelPos, y: crossPos } : { x: crossPos, y: currentLevelPos });
+    }
+  };
+
+  let rootCrossPos = 0;
+  const visitedPos = new Set<string>();
+
+  rootIds.forEach((rId) => {
+    const ss = subtreeSizes.get(rId) || (isLR ? getNodeHeight(rId) : getNodeWidth(rId));
+    positionNode(rId, rootCrossPos, 0, visitedPos);
+    rootCrossPos += ss + 90;
+  });
+
+  nodes.forEach((n) => {
+    if (!nodePositions.has(n.id)) {
+      nodePositions.set(n.id, isLR ? { x: 0, y: rootCrossPos } : { x: rootCrossPos, y: 0 });
+      rootCrossPos += (isLR ? getNodeHeight(n.id) : getNodeWidth(n.id)) + 60;
+    }
+  });
+
+  const layoutedNodes = nodes.map((node) => {
+    const pos = nodePositions.get(node.id) || { x: 0, y: 0 };
     return {
       ...node,
-      position: {
-        x: nodeWithPosition.x - widthOffset,
-        y: nodeWithPosition.y - heightOffset,
-      },
+      position: pos,
     };
   });
 
   return { nodes: layoutedNodes, edges };
 };
 
+const getLayoutedElements = (
+  nodes: Node[],
+  edges: Edge[],
+  layoutMode: LayoutMode = 'elk_vertical',
+  isCompact = false
+) => {
+  if (layoutMode === 'free_graph') {
+    return { nodes, edges };
+  }
+
+  const direction = layoutMode === 'elk_horizontal' ? 'LR' : 'TB';
+  return getElkTreeLayout(nodes, edges, direction, isCompact);
+};
+
 function NodeDiagramInner({
   rawPersons,
   rawUnions,
   allUnions,
-  layoutMode = 'family_tree',
+  layoutMode = 'elk_vertical',
   setLayoutMode,
   focusedUnionId,
   setFocusedUnionId,
   isCompactView = false,
   focusedPersonId = null,
+  theme = 'dark',
   onSelectNode,
   onAddNodeClick,
 }: NodeDiagramInnerProps) {
-  const { setCenter } = useReactFlow();
+  const isLight = theme === 'light';
+  const { setCenter, zoomIn, zoomOut, fitView, getZoom, setViewport } = useReactFlow();
 
-  // Collapsible Unions state (Set of collapsed union IDs)
-  const [collapsedUnionIds, setCollapsedUnionIds] = useState<Set<string>>(new Set());
+  const [currentZoomLevel, setCurrentZoomLevel] = useState<number>(1);
 
-  // Toggle state for Top-Left Control Panel (Hidden by default to prioritize canvas area)
+  // Flexible Edge Routing state: 'step' (Orthogonal 90° lines) or 'straight' (Straight lines)
+  const [edgeRouting, setEdgeRouting] = useState<EdgeRoutingType>('step');
+
+  // Toggle state for Top-Left Control Panel
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
-
-  const handleToggleCollapseUnion = useCallback((rawUnionId: string) => {
-    setCollapsedUnionIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(rawUnionId)) {
-        next.delete(rawUnionId);
-      } else {
-        next.add(rawUnionId);
-      }
-      return next;
-    });
-  }, []);
-
-  // Compute hidden person and union IDs when unions are collapsed
-  const { hiddenPersonIds, hiddenUnionIds } = useMemo(() => {
-    const hiddenPersons = new Set<string>();
-    const hiddenUnions = new Set<string>();
-
-    if (collapsedUnionIds.size === 0) {
-      return { hiddenPersonIds: hiddenPersons, hiddenUnionIds: hiddenUnions };
-    }
-
-    const queue: string[] = [];
-
-    // Find direct children of collapsed unions
-    collapsedUnionIds.forEach((uId) => {
-      const union = rawUnions.find((u) => u.id === uId);
-      if (union && union.children) {
-        union.children.forEach((child: any) => {
-          hiddenPersons.add(child.id);
-          queue.push(child.id);
-        });
-      }
-    });
-
-    // BFS downstream descendants & descendant unions
-    while (queue.length > 0) {
-      const currentPersonId = queue.shift()!;
-      const childUnions = rawUnions.filter(
-        (u) => u.partner1Id === currentPersonId || u.partner2Id === currentPersonId
-      );
-
-      childUnions.forEach((u) => {
-        hiddenUnions.add(u.id);
-        if (u.children) {
-          u.children.forEach((c: any) => {
-            if (!hiddenPersons.has(c.id)) {
-              hiddenPersons.add(c.id);
-              queue.push(c.id);
-            }
-          });
-        }
-      });
-    }
-
-    return { hiddenPersonIds: hiddenPersons, hiddenUnionIds: hiddenUnions };
-  }, [collapsedUnionIds, rawUnions]);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
-    // Filter visible persons
-    const visiblePersons = rawPersons.filter((p) => !hiddenPersonIds.has(p.id));
-    // Filter visible unions
-    const visibleUnions = rawUnions.filter((u) => !hiddenUnionIds.has(u.id));
-
     // 1. Person Nodes
-    visiblePersons.forEach((p) => {
+    rawPersons.forEach((p) => {
       const hasSavedPosition =
         p.positionX !== null && p.positionY !== null && layoutMode === 'free_graph';
       const isSearchTarget = focusedPersonId === p.id;
@@ -225,6 +278,7 @@ function NodeDiagramInner({
           images: p.images,
           isCompact: isCompactView,
           layoutMode: layoutMode,
+          theme: theme,
           onNodeClick: onSelectNode,
         } as PersonNodeData,
         position: hasSavedPosition
@@ -234,15 +288,13 @@ function NodeDiagramInner({
       });
     });
 
-    const isBezier = layoutMode === 'mind_map' || layoutMode === 'dendrogram';
-    const defaultEdgeType = isBezier ? 'bezier' : 'step';
-    const childEdgeStroke = layoutMode === 'dendrogram' ? '#94a3b8' : '#2563eb';
+    const defaultEdgeType = edgeRouting; // 'step' for 90° orthogonal, 'straight' for direct lines
+    const childEdgeStroke = isLight ? '#10b981' : '#34d399'; // Emerald green stroke for ELK tree connections
 
     // 2. Marriage Union Junction Nodes & Edges
-    visibleUnions.forEach((u) => {
+    rawUnions.forEach((u) => {
       const unionNodeId = `union-${u.id}`;
       const childCount = u.children ? u.children.length : 0;
-      const isCollapsed = collapsedUnionIds.has(u.id);
 
       nodes.push({
         id: unionNodeId,
@@ -251,14 +303,14 @@ function NodeDiagramInner({
           id: unionNodeId,
           rawUnionId: u.id,
           childCount,
-          isCollapsed,
-          onToggleCollapse: handleToggleCollapseUnion,
+          isCollapsed: false,
+          theme: theme,
         } as UnionNodeData,
         position: { x: 0, y: 0 },
       });
 
       // MARRIAGE EDGES (RED `#ef4444`)
-      if (u.partner1Id && !hiddenPersonIds.has(u.partner1Id)) {
+      if (u.partner1Id) {
         edges.push({
           id: `e-${u.partner1Id}-${unionNodeId}`,
           source: u.partner1Id,
@@ -269,7 +321,7 @@ function NodeDiagramInner({
         });
       }
 
-      if (u.partner2Id && !hiddenPersonIds.has(u.partner2Id)) {
+      if (u.partner2Id) {
         edges.push({
           id: `e-${u.partner2Id}-${unionNodeId}`,
           source: u.partner2Id,
@@ -280,40 +332,35 @@ function NodeDiagramInner({
         });
       }
 
-      // PARENT-TO-CHILD EDGES (SLATE/BLUE BEZIER) - only if not collapsed
-      if (!isCollapsed && u.children && u.children.length > 0) {
+      // PARENT-TO-CHILD EDGES (GREEN/EMERALD STEP OR STRAIGHT)
+      if (u.children && u.children.length > 0) {
         u.children.forEach((child: any) => {
-          if (!hiddenPersonIds.has(child.id)) {
-            edges.push({
-              id: `e-${unionNodeId}-${child.id}`,
-              source: unionNodeId,
-              target: child.id,
-              type: defaultEdgeType,
-              reconnectable: true,
-              style: { stroke: childEdgeStroke, strokeWidth: isBezier ? 2 : 2.5 },
-            });
-          }
+          edges.push({
+            id: `e-${unionNodeId}-${child.id}`,
+            source: unionNodeId,
+            target: child.id,
+            type: defaultEdgeType,
+            reconnectable: true,
+            style: { stroke: childEdgeStroke, strokeWidth: 2.5 },
+          });
         });
       }
     });
 
     // 3. Fallback direct relation
-    visiblePersons.forEach((p) => {
-      if (p.parentUnionId && !hiddenUnionIds.has(p.parentUnionId)) {
-        const isParentUnionCollapsed = collapsedUnionIds.has(p.parentUnionId);
-        if (!isParentUnionCollapsed) {
-          const unionNodeId = `union-${p.parentUnionId}`;
-          const edgeExists = edges.some((e) => e.source === unionNodeId && e.target === p.id);
-          if (!edgeExists) {
-            edges.push({
-              id: `e-${unionNodeId}-${p.id}`,
-              source: unionNodeId,
-              target: p.id,
-              type: defaultEdgeType,
-              reconnectable: true,
-              style: { stroke: childEdgeStroke, strokeWidth: isBezier ? 2 : 2.5 },
-            });
-          }
+    rawPersons.forEach((p) => {
+      if (p.parentUnionId) {
+        const unionNodeId = `union-${p.parentUnionId}`;
+        const edgeExists = edges.some((e) => e.source === unionNodeId && e.target === p.id);
+        if (!edgeExists) {
+          edges.push({
+            id: `e-${unionNodeId}-${p.id}`,
+            source: unionNodeId,
+            target: p.id,
+            type: defaultEdgeType,
+            reconnectable: true,
+            style: { stroke: childEdgeStroke, strokeWidth: 2.5 },
+          });
         }
       }
     });
@@ -324,12 +371,11 @@ function NodeDiagramInner({
     rawUnions,
     layoutMode,
     isCompactView,
+    edgeRouting,
+    theme,
+    isLight,
     focusedPersonId,
     onSelectNode,
-    hiddenPersonIds,
-    hiddenUnionIds,
-    collapsedUnionIds,
-    handleToggleCollapseUnion,
   ]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -382,22 +428,30 @@ function NodeDiagramInner({
   const onConnect = useCallback(
     (params: Connection) => {
       if (params.source === params.target) return;
-      const isBezier = layoutMode === 'mind_map' || layoutMode === 'dendrogram';
       const newEdge = {
         ...params,
-        type: isBezier ? 'bezier' : 'step',
+        type: edgeRouting,
         reconnectable: true,
-        style: { stroke: layoutMode === 'dendrogram' ? '#94a3b8' : '#2563eb', strokeWidth: 2 },
+        style: {
+          stroke: isLight ? '#10b981' : '#34d399',
+          strokeWidth: 2.5,
+        },
       };
       setEdges((els) => addEdge(newEdge, els));
     },
-    [setEdges, layoutMode]
+    [setEdges, edgeRouting, isLight]
   );
+
+  // Update zoom indicator when viewport changes
+  const handleMove = useCallback(() => {
+    const z = getZoom();
+    if (z) setCurrentZoomLevel(z);
+  }, [getZoom]);
 
   const unionsForDropdown = allUnions || rawUnions;
 
   return (
-    <div className="relative h-full w-full bg-slate-950">
+    <div className={`relative h-full w-full ${isLight ? 'bg-slate-100' : 'bg-slate-950'}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -406,6 +460,7 @@ function NodeDiagramInner({
         onNodeDragStop={onNodeDragStop}
         onReconnect={onReconnect}
         onConnect={onConnect}
+        onMove={handleMove}
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         fitView
@@ -416,59 +471,235 @@ function NodeDiagramInner({
         panOnDrag={[1, 2]}
         selectionMode={SelectionMode.Partial}
         defaultEdgeOptions={{
-          type: layoutMode === 'mind_map' || layoutMode === 'dendrogram' ? 'bezier' : 'step',
+          type: edgeRouting,
         }}
       >
-        <Background color="#334155" variant={BackgroundVariant.Dots} gap={20} size={1} />
-        <Controls />
+        <Background
+          color={isLight ? '#cbd5e1' : '#334155'}
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+        />
         <MiniMap
-          nodeColor={(n) => (n.type === 'unionNode' ? '#ef4444' : '#475569')}
-          maskColor="rgba(15, 23, 42, 0.7)"
-          className="!bg-slate-900 !border-slate-700 !rounded-xl overflow-hidden"
+          nodeColor={(n) => (n.type === 'unionNode' ? '#ef4444' : isLight ? '#94a3b8' : '#475569')}
+          maskColor={isLight ? 'rgba(241, 245, 249, 0.7)' : 'rgba(15, 23, 42, 0.7)'}
+          className={`!rounded-xl overflow-hidden ${
+            isLight ? '!bg-white !border-slate-300' : '!bg-slate-900 !border-slate-700'
+          }`}
         />
       </ReactFlow>
 
-      {/* Top-Left Canvas Overlay Toggleable Control Box (Hidden by default to maximize canvas space) */}
+      {/* Enhanced Interactive Zoom & Pan Control Bar */}
+      <div className="absolute bottom-6 right-6 z-20 flex items-center gap-1.5 rounded-2xl border p-1.5 shadow-2xl backdrop-blur-md">
+        <div
+          className={`flex items-center gap-1 rounded-xl p-1 ${
+            isLight
+              ? 'bg-white/95 border border-slate-200 text-slate-800 shadow-lg'
+              : 'bg-slate-900/95 border border-slate-800 text-slate-200 shadow-2xl'
+          }`}
+        >
+          {/* Zoom In Button */}
+          <button
+            onClick={() => zoomIn({ duration: 300 })}
+            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              isLight ? 'hover:bg-slate-100 text-slate-700' : 'hover:bg-slate-800 text-slate-200'
+            }`}
+            title="Zoom In (ขยายภาพ)"
+          >
+            <ZoomIn className="h-4.5 w-4.5" />
+          </button>
+
+          {/* Zoom Out Button */}
+          <button
+            onClick={() => zoomOut({ duration: 300 })}
+            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              isLight ? 'hover:bg-slate-100 text-slate-700' : 'hover:bg-slate-800 text-slate-200'
+            }`}
+            title="Zoom Out (ย่อภาพ)"
+          >
+            <ZoomOut className="h-4.5 w-4.5" />
+          </button>
+
+          {/* Zoom Percentage Badge & Reset */}
+          <button
+            onClick={() => setViewport({ x: 0, y: 0, zoom: 1.0 }, { duration: 400 })}
+            className={`flex h-9 items-center px-2.5 rounded-lg text-xs font-mono font-bold transition-colors ${
+              isLight
+                ? 'bg-slate-100 text-indigo-700 hover:bg-slate-200'
+                : 'bg-slate-800 text-indigo-300 hover:bg-slate-700'
+            }`}
+            title="คลิกเพื่อรีเซ็ตขนาดซูม 100%"
+          >
+            {Math.round(currentZoomLevel * 100)}%
+          </button>
+
+          <div className={`h-4 w-px ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
+
+          {/* Fit View Button */}
+          <button
+            onClick={() => fitView({ duration: 500, padding: 0.25 })}
+            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              isLight ? 'hover:bg-slate-100 text-slate-700' : 'hover:bg-slate-800 text-slate-200'
+            }`}
+            title="Fit View (จัดผังพอดีหน้าจอ)"
+          >
+            <Maximize className="h-4.5 w-4.5" />
+          </button>
+
+          {/* Pan Indicator Hint */}
+          <div
+            className={`hidden sm:flex items-center gap-1 px-2.5 text-[11px] font-medium border-l ${
+              isLight ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'
+            }`}
+            title="คุณสามารถคลิกค้างและลากเพื่อเลื่อนพื้นที่ (Pan) Canvas ได้"
+          >
+            <Move className="h-3.5 w-3.5 text-indigo-500" />
+            <span>Pan Area</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Top-Left Canvas Overlay ELK Tree View & Edge Controls Box */}
       {!isControlPanelOpen ? (
         <button
           onClick={() => setIsControlPanelOpen(true)}
-          className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/90 px-3.5 py-2.5 text-xs font-semibold text-slate-200 shadow-2xl backdrop-blur-md hover:bg-slate-800 hover:border-slate-700 transition-all active:scale-95 group"
-          title="คลิกเพื่อเปิดเครื่องมือเลือกรูปแบบผังและตัวกรอง"
+          className={`absolute top-4 left-4 z-10 flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-semibold shadow-2xl backdrop-blur-md transition-all active:scale-95 group ${
+            isLight
+              ? 'bg-white/95 border-slate-300 text-slate-800 hover:bg-slate-100'
+              : 'bg-slate-900/90 border-slate-800 text-slate-200 hover:bg-slate-800'
+          }`}
+          title="คลิกเพื่อเปิดเครื่องมือเลือกมุมมองผัง ELK และเส้นความสัมพันธ์"
         >
-          <SlidersHorizontal className="h-4 w-4 text-indigo-400 group-hover:rotate-180 transition-transform duration-300" />
-          <span>เครื่องมือผัง & ตัวกรอง</span>
+          <SlidersHorizontal className="h-4 w-4 text-indigo-500 group-hover:rotate-180 transition-transform duration-300" />
+          <span>เครื่องมือผัง ELK Tree</span>
           {focusedUnionId && (
             <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
           )}
         </button>
       ) : (
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2.5 rounded-2xl border border-slate-800 bg-slate-900/95 p-3.5 shadow-2xl backdrop-blur-md text-xs max-w-xs sm:max-w-md animate-in fade-in zoom-in-95 duration-200">
+        <div
+          className={`absolute top-4 left-4 z-10 flex flex-col gap-3 rounded-2xl border p-4 shadow-2xl backdrop-blur-md text-xs max-w-xs sm:max-w-md animate-in fade-in zoom-in-95 duration-200 ${
+            isLight
+              ? 'bg-white/95 border-slate-300 text-slate-800'
+              : 'bg-slate-900/95 border-slate-800 text-slate-200'
+          }`}
+        >
           {/* Control Panel Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <div className="flex items-center gap-2 text-slate-200 font-bold">
-              <SlidersHorizontal className="h-4 w-4 text-indigo-400" />
-              <span>เครื่องมือผัง & ตัวกรอง</span>
+          <div
+            className={`flex items-center justify-between border-b pb-2 ${
+              isLight ? 'border-slate-200' : 'border-slate-800'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <Network className="h-4 w-4 text-emerald-500" />
+              <span>เครื่องมือผัง ELK Tree</span>
             </div>
             <button
               onClick={() => setIsControlPanelOpen(false)}
-              className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-800 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400 transition-colors"
+              className={`flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${
+                isLight
+                  ? 'bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600'
+                  : 'bg-slate-800 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400'
+              }`}
               title="ซ่อนกล่องเครื่องมือ"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Branch Lineage Filter */}
+          {/* 1. ELK Tree View Direction Selector (Vertical vs Horizontal) */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              ทิศทางแสดงผล (Layout Direction)
+            </span>
+            {setLayoutMode && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setLayoutMode('elk_vertical')}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                    layoutMode === 'elk_vertical'
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                      : isLight
+                      ? 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title="แสดงผังแบบแนวตั้ง (จากบนลงล่าง Top-Down)"
+                >
+                  <ArrowDown className="h-4 w-4 text-indigo-400" />
+                  <span>แนวตั้ง (Vertical)</span>
+                </button>
+
+                <button
+                  onClick={() => setLayoutMode('elk_horizontal')}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                    layoutMode === 'elk_horizontal'
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                      : isLight
+                      ? 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title="แสดงผังแบบแนวนอน (จากซ้ายไปขวา Left-to-Right)"
+                >
+                  <ArrowRight className="h-4 w-4 text-indigo-400" />
+                  <span>แนวนอน (Horizontal)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 2. Flexible Edge Routing Selector (Orthogonal 90° vs Straight Line) */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              รูปแบบเส้นความสัมพันธ์ (Edge Style)
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setEdgeRouting('step')}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                  edgeRouting === 'step'
+                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
+                    : isLight
+                    ? 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                }`}
+                title="เส้นฉากทำมุม 90 องศา (Orthogonal Step Line)"
+              >
+                <CornerDownRight className="h-4 w-4 text-emerald-300" />
+                <span>เส้นหักมุม 90°</span>
+              </button>
+
+              <button
+                onClick={() => setEdgeRouting('straight')}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                  edgeRouting === 'straight'
+                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
+                    : isLight
+                    ? 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                }`}
+                title="เส้นตรงเชื่อมโยงจุดต่อจุด (Straight Line)"
+              >
+                <Minus className="h-4 w-4 text-emerald-300" />
+                <span>เส้นตรง (Straight)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Branch Lineage Filter */}
           {setFocusedUnionId && (
-            <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1.5">
-              <GitFork className="h-4 w-4 text-indigo-400 shrink-0" />
-              <span className="text-xs font-semibold text-slate-300 shrink-0">สายตระกูล:</span>
+            <div
+              className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${
+                isLight ? 'bg-slate-50 border-slate-300' : 'bg-slate-950/80 border-slate-800'
+              }`}
+            >
+              <GitFork className="h-4 w-4 text-indigo-500 shrink-0" />
+              <span className="text-xs font-semibold shrink-0">สายตระกูล:</span>
               <select
                 value={focusedUnionId || ''}
                 onChange={(e) => setFocusedUnionId(e.target.value || null)}
-                className="w-full bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer truncate"
+                className="w-full bg-transparent text-xs font-medium focus:outline-none cursor-pointer truncate"
               >
-                <option value="" className="bg-slate-900 text-slate-200">
+                <option value="" className={isLight ? 'bg-white text-slate-800' : 'bg-slate-900 text-slate-200'}>
                   -- แสดงผังทั้งหมด --
                 </option>
                 {unionsForDropdown.map((u) => {
@@ -476,7 +707,11 @@ function NodeDiagramInner({
                   const p2 = rawPersons.find((p) => p.id === u.partner2Id)?.name;
                   const label = `${p1 || 'ไม่ระบุ'} ❤️ ${p2 || 'ไม่ระบุ'}`;
                   return (
-                    <option key={u.id} value={u.id} className="bg-slate-900 text-slate-200">
+                    <option
+                      key={u.id}
+                      value={u.id}
+                      className={isLight ? 'bg-white text-slate-800' : 'bg-slate-900 text-slate-200'}
+                    >
                       {label}
                     </option>
                   );
@@ -485,106 +720,15 @@ function NodeDiagramInner({
               {focusedUnionId && (
                 <button
                   onClick={() => setFocusedUnionId(null)}
-                  className="rounded p-0.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 shrink-0"
+                  className={`rounded p-0.5 shrink-0 ${
+                    isLight ? 'hover:bg-slate-200 text-slate-500' : 'hover:bg-slate-800 text-slate-400'
+                  }`}
                   title="ล้างตัวกรองสายตระกูล"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
-          )}
-
-          {/* Layout Modes List / Selector Buttons */}
-          {setLayoutMode && (
-            <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/80 p-1">
-              <button
-                onClick={() => setLayoutMode('family_tree')}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                  layoutMode === 'family_tree'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-                title="ผังเครือญาติคลาสสิก"
-              >
-                <TreeDeciduous className="h-3.5 w-3.5" />
-                <span>ผังเครือญาติ</span>
-              </button>
-
-              <button
-                onClick={() => setLayoutMode('collapsible_tree')}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                  layoutMode === 'collapsible_tree'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-                title="ผังพับเก็บได้"
-              >
-                <FolderTree className="h-3.5 w-3.5" />
-                <span>ผังพับเก็บได้</span>
-              </button>
-
-              <button
-                onClick={() => setLayoutMode('dendrogram')}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                  layoutMode === 'dendrogram'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-                title="ผังเดนโดรแกรม"
-              >
-                <GitBranch className="h-3.5 w-3.5" />
-                <span>ผังเดนโดรแกรม</span>
-              </button>
-
-              <button
-                onClick={() => setLayoutMode('org_chart')}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                  layoutMode === 'org_chart'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-                title="ผังองค์กร"
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                <span>ผังองค์กร</span>
-              </button>
-
-              <button
-                onClick={() => setLayoutMode('mind_map')}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                  layoutMode === 'mind_map'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-                title="ผังมโนทัศน์"
-              >
-                <BrainCircuit className="h-3.5 w-3.5" />
-                <span>ผังมโนทัศน์</span>
-              </button>
-
-              <button
-                onClick={() => setLayoutMode('free_graph')}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                  layoutMode === 'free_graph'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-                title="ผังอิสระ"
-              >
-                <Share2 className="h-3.5 w-3.5" />
-                <span>ผังอิสระ</span>
-              </button>
-            </div>
-          )}
-
-          {/* Expand All Collapsed Branches Button */}
-          {collapsedUnionIds.size > 0 && (
-            <button
-              onClick={() => setCollapsedUnionIds(new Set())}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-all active:scale-95"
-            >
-              <span>ขยายผังทั้งหมด ({collapsedUnionIds.size} สายแต่งงานถูกซ่อน)</span>
-            </button>
           )}
         </div>
       )}

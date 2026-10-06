@@ -19,3 +19,4 @@ yarn-error.log*
 *.pem
 .env*.local
 .env
+node_modules
