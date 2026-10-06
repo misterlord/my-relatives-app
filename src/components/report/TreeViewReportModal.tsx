@@ -218,22 +218,10 @@ const TreeNodeRow = ({
         <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
           <span className="font-medium text-xs truncate">{node.name}</span>
 
-          {/* Single Combined Gender & Deceased Status Badge */}
+          {/* Unified Gender & Deceased Status Badge */}
           <span
             className={`inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[10px] font-semibold border shrink-0 ${
-              node.isDeceased
-                ? isLight
-                  ? isMale
-                    ? 'bg-slate-200 text-slate-800 border-blue-500 font-bold'
-                    : isFemale
-                    ? 'bg-slate-200 text-slate-800 border-pink-500 font-bold'
-                    : 'bg-slate-200 text-slate-800 border-slate-500 font-bold'
-                  : isMale
-                  ? 'bg-slate-800 text-slate-200 border-blue-400 font-bold'
-                  : isFemale
-                  ? 'bg-slate-800 text-slate-200 border-pink-400 font-bold'
-                  : 'bg-slate-800 text-slate-200 border-slate-600 font-bold'
-                : isMale
+              isMale
                 ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
                 : isFemale
                 ? 'bg-pink-500/10 text-pink-500 border-pink-500/30'
