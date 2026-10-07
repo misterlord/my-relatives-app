@@ -17,7 +17,10 @@ import {
   addEdge,
   reconnectEdge,
   SelectionMode,
+  getNodesBounds,
+  getViewportForBounds,
 } from '@xyflow/react';
+import { toJpeg } from 'html-to-image';
 import '@xyflow/react/dist/style.css';
 import { CustomNode, PersonNodeData } from './CustomNode';
 import { UnionNode, UnionNodeData } from './UnionNode';
@@ -35,6 +38,8 @@ import {
   CornerDownRight,
   Minus,
   Network,
+  Download,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 export type LayoutMode = 'elk_vertical' | 'elk_horizontal' | 'free_graph';
@@ -343,6 +348,60 @@ function NodeDiagramInner({
   const { setCenter, zoomIn, zoomOut, fitView, getZoom, setViewport } = useReactFlow();
 
   const [currentZoomLevel, setCurrentZoomLevel] = useState<number>(1);
+  const [isExportingJpeg, setIsExportingJpeg] = useState(false);
+  const { getNodes } = useReactFlow();
+
+  // Export Diagram to JPEG Image Handler
+  const handleExportJpeg = useCallback(async () => {
+    const currentNodes = getNodes();
+    if (!currentNodes || currentNodes.length === 0) return;
+
+    setIsExportingJpeg(true);
+    try {
+      const viewportElement = document.querySelector('.react-flow__viewport') as HTMLElement;
+      if (!viewportElement) throw new Error('Viewport element not found');
+
+      // Calculate bounding box for all diagram nodes
+      const nodesBounds = getNodesBounds(currentNodes);
+      const minWidth = 1400;
+      const minHeight = 900;
+      const imageWidth = Math.max(minWidth, Math.round(nodesBounds.width + 240));
+      const imageHeight = Math.max(minHeight, Math.round(nodesBounds.height + 240));
+
+      const viewport = getViewportForBounds(
+        nodesBounds,
+        imageWidth,
+        imageHeight,
+        0.2,
+        2.0,
+        0.15
+      );
+
+      const dataUrl = await toJpeg(viewportElement, {
+        backgroundColor: isLight ? '#f1f5f9' : '#020617',
+        width: imageWidth,
+        height: imageHeight,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        },
+        quality: 0.95,
+        pixelRatio: 2,
+      });
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const link = document.createElement('a');
+      link.download = `my-relatives-family-tree-${dateStr}.jpg`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Failed to export JPEG:', err);
+      alert('เกิดข้อผิดพลาด ไม่สามารถส่งออกรูปภาพ JPEG ได้ในขณะนี้');
+    } finally {
+      setIsExportingJpeg(false);
+    }
+  }, [getNodes, isLight]);
 
   // Flexible Edge Routing state: 'straight' (Straight lines) or 'step' (Orthogonal 90° lines)
   const [edgeRouting, setEdgeRouting] = useState<EdgeRoutingType>('straight');
@@ -639,6 +698,23 @@ function NodeDiagramInner({
             <Maximize className="h-4.5 w-4.5" />
           </button>
 
+          <div className={`h-4 w-px ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
+
+          {/* Export JPEG Image Button */}
+          <button
+            onClick={handleExportJpeg}
+            disabled={isExportingJpeg}
+            className={`flex h-9 items-center gap-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
+              isLight
+                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300'
+                : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900 border border-emerald-800'
+            }`}
+            title="ดาวน์โหลดส่งออกผังเครือญาติเป็นรูปภาพ JPEG"
+          >
+            <Download className={`h-4 w-4 text-emerald-500 ${isExportingJpeg ? 'animate-bounce' : ''}`} />
+            <span>{isExportingJpeg ? 'กำลังส่งออก...' : 'Export JPEG'}</span>
+          </button>
+
           {/* Pan Indicator Hint */}
           <div
             className={`hidden sm:flex items-center gap-1 px-2.5 text-[11px] font-medium border-l ${
@@ -823,6 +899,21 @@ function NodeDiagramInner({
               )}
             </div>
           )}
+
+          {/* 4. Export JPEG Button */}
+          <button
+            onClick={handleExportJpeg}
+            disabled={isExportingJpeg}
+            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition-all shadow-md ${
+              isLight
+                ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                : 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500'
+            }`}
+            title="ส่งออกผังแสดงความสัมพันธ์เป็นไฟล์รูปภาพ JPEG"
+          >
+            <Download className={`h-4 w-4 text-white ${isExportingJpeg ? 'animate-bounce' : ''}`} />
+            <span>{isExportingJpeg ? 'กำลังสร้างไฟล์ JPEG...' : 'Export รูปผัง (JPEG)'}</span>
+          </button>
         </div>
       )}
 
