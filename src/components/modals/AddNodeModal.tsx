@@ -17,6 +17,7 @@ interface AddNodeModalProps {
   allPersons: SimplePerson[];
   initialReferencePersonId?: string | null;
   initialRelationshipType?: 'child' | 'spouse' | 'parent';
+  groupId?: string | null;
 }
 
 export function AddNodeModal({
@@ -27,6 +28,7 @@ export function AddNodeModal({
   allPersons,
   initialReferencePersonId = null,
   initialRelationshipType = 'child',
+  groupId = null,
 }: AddNodeModalProps) {
   const isLight = theme === 'light';
   const [name, setName] = useState('');
@@ -77,6 +79,7 @@ export function AddNodeModal({
           isDeceased,
           relationshipType,
           referencePersonId: referencePersonId || undefined,
+          groupId: groupId || undefined,
         }),
       });
 

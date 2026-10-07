@@ -58,6 +58,7 @@ interface NodeDiagramInnerProps {
   theme?: 'dark' | 'light';
   onSelectNode: (id: string) => void;
   onAddNodeClick: () => void;
+  onRefreshNeeded?: () => void;
 }
 
 const nodeTypes = {
@@ -89,6 +90,17 @@ const getElkTreeLayout = (
     if (parentMap.has(e.target)) {
       parentMap.get(e.target)!.push(e.source);
     }
+  });
+
+  // Sort children of each node by order (data.order) to enforce sibling ordering (left = older/พี่, right = younger/น้อง)
+  childrenMap.forEach((childrenList) => {
+    childrenList.sort((aId, bId) => {
+      const nodeA = nodeMap.get(aId);
+      const nodeB = nodeMap.get(bId);
+      const orderA = (nodeA?.data?.order as number) ?? 0;
+      const orderB = (nodeB?.data?.order as number) ?? 0;
+      return orderA - orderB;
+    });
   });
 
   const getNodeWidth = (id: string) => {
@@ -343,6 +355,7 @@ function NodeDiagramInner({
   theme = 'dark',
   onSelectNode,
   onAddNodeClick,
+  onRefreshNeeded,
 }: NodeDiagramInnerProps) {
   const isLight = theme === 'light';
   const { setCenter, zoomIn, zoomOut, fitView, getZoom, setViewport } = useReactFlow();
@@ -413,6 +426,30 @@ function NodeDiagramInner({
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
+    // Build direct children count map (only direct child nodes attached to parent's unions)
+    const childrenCountMap = new Map<string, number>();
+    const unionMap = new Map<string, any>(rawUnions.map((u) => [u.id, u]));
+
+    rawPersons.forEach((p) => {
+      if (p.parentUnionId) {
+        const parentUnion = unionMap.get(p.parentUnionId);
+        if (parentUnion) {
+          if (parentUnion.partner1Id) {
+            childrenCountMap.set(
+              parentUnion.partner1Id,
+              (childrenCountMap.get(parentUnion.partner1Id) || 0) + 1
+            );
+          }
+          if (parentUnion.partner2Id) {
+            childrenCountMap.set(
+              parentUnion.partner2Id,
+              (childrenCountMap.get(parentUnion.partner2Id) || 0) + 1
+            );
+          }
+        }
+      }
+    });
+
     // 1. Person Nodes
     rawPersons.forEach((p) => {
       const hasSavedPosition =
@@ -429,6 +466,8 @@ function NodeDiagramInner({
           description: p.description,
           birthDate: p.birthDate,
           isDeceased: Boolean(p.isDeceased),
+          childrenCount: childrenCountMap.get(p.id) || 0,
+          order: p.order || 0,
           images: p.images,
           isCompact: isCompactView,
           layoutMode: layoutMode,
@@ -554,17 +593,61 @@ function NodeDiagramInner({
     return edge.source !== edge.target;
   }, []);
 
-  const onNodeDragStop = useCallback((_: unknown, node: Node) => {
-    if (node.type === 'customNode') {
-      fetch('/api/nodes/positions', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          positions: [{ id: node.id, x: node.position.x, y: node.position.y }],
-        }),
-      }).catch(() => {});
-    }
-  }, []);
+  const onNodeDragStop = useCallback(
+    async (_: unknown, node: Node) => {
+      if (node.type === 'customNode') {
+        fetch('/api/nodes/positions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            positions: [{ id: node.id, x: node.position.x, y: node.position.y }],
+          }),
+        }).catch(() => {});
+
+        // Reorder siblings based on horizontal X coordinate (left = older/พี่, right = younger/น้อง)
+        const currentPerson = rawPersons.find((p) => p.id === node.id);
+        if (currentPerson && currentPerson.parentUnionId) {
+          const siblings = rawPersons.filter(
+            (p) => p.parentUnionId === currentPerson.parentUnionId
+          );
+
+          if (siblings.length > 1) {
+            const siblingNodesWithX = siblings.map((s) => {
+              const liveNode = nodes.find((n) => n.id === s.id);
+              const posX = liveNode
+                ? liveNode.id === node.id
+                  ? node.position.x
+                  : liveNode.position.x
+                : 0;
+              return { id: s.id, x: posX };
+            });
+
+            // Sort siblings left-to-right (X ascending)
+            siblingNodesWithX.sort((a, b) => a.x - b.x);
+
+            const reorderItems = siblingNodesWithX.map((item, idx) => ({
+              id: item.id,
+              order: idx,
+            }));
+
+            try {
+              await fetch('/api/nodes/reorder', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: reorderItems }),
+              });
+              if (onRefreshNeeded) {
+                onRefreshNeeded();
+              }
+            } catch (err) {
+              console.error('Failed to reorder siblings:', err);
+            }
+          }
+        }
+      }
+    },
+    [rawPersons, nodes, onRefreshNeeded]
+  );
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {

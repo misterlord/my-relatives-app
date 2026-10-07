@@ -26,6 +26,10 @@ export async function GET(request: Request, context: Context) {
           include: {
             partner1: { select: { id: true, name: true, gender: true } },
             partner2: { select: { id: true, name: true, gender: true } },
+            children: {
+              select: { id: true, name: true, gender: true, order: true },
+              orderBy: [{ order: 'asc' }, { birthDate: 'asc' }, { createdAt: 'asc' }],
+            },
           },
         },
         unionsAsPartner1: {

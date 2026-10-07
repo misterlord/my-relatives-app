@@ -23,6 +23,7 @@ interface TreeNode {
   description?: string | null;
   isDeceased?: boolean;
   spouseName?: string | null;
+  directChildrenCount?: number;
   children: TreeNode[];
   isFolder: boolean;
 }
@@ -32,8 +33,11 @@ interface TreeViewReportModalProps {
   theme?: 'dark' | 'light';
   persons: any[];
   unions: any[];
+  groups?: any[];
+  activeGroupId?: string | null;
   onClose: () => void;
   onSelectPerson: (personId: string) => void;
+  onSelectGroup?: (groupId: string) => void;
 }
 
 // Build Family Tree Node Hierarchy without duplicates
@@ -95,6 +99,12 @@ function buildFamilyTreeNodes(persons: any[], unions: any[]): TreeNode[] {
       }
     });
 
+    // Direct children count for this person (immediate children attached to this person's unions)
+    let directChildrenCount = 0;
+    personUnions.forEach((u) => {
+      if (u.children) directChildrenCount += u.children.length;
+    });
+
     const isFolder = childNodes.length > 0 || spouseNames.length > 0;
 
     return {
@@ -105,6 +115,7 @@ function buildFamilyTreeNodes(persons: any[], unions: any[]): TreeNode[] {
       description: person.description,
       isDeceased: Boolean(person.isDeceased),
       spouseName: spouseNames.length > 0 ? spouseNames.join(', ') : null,
+      directChildrenCount,
       children: childNodes,
       isFolder,
     };
@@ -232,6 +243,19 @@ const TreeNodeRow = ({
             </span>
           )}
 
+          {/* Direct Children Count Tag */}
+          {node.directChildrenCount !== undefined && node.directChildrenCount > 0 && (
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded border shrink-0 ${
+                isLight
+                  ? 'bg-amber-50 text-amber-800 border-amber-200 font-semibold'
+                  : 'bg-amber-950/40 text-amber-300 border-amber-900/40 font-semibold'
+              }`}
+            >
+              👶 บุตร {node.directChildrenCount} คน
+            </span>
+          )}
+
           {/* View Details Button on Hover */}
           <button
             onClick={(e) => {
@@ -272,17 +296,52 @@ export function TreeViewReportModal({
   theme = 'dark',
   persons,
   unions,
+  groups = [],
+  activeGroupId = null,
   onClose,
   onSelectPerson,
+  onSelectGroup,
 }: TreeViewReportModalProps) {
   const isLight = theme === 'light';
+
+  // State for group filtering inside report
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(activeGroupId || null);
+  const [reportPersons, setReportPersons] = useState<any[]>(persons);
+  const [reportUnions, setReportUnions] = useState<any[]>(unions);
+
+  // Synchronize state when props or isOpen change
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedGroupId(activeGroupId || null);
+      setReportPersons(persons);
+      setReportUnions(unions);
+    }
+  }, [isOpen, activeGroupId, persons, unions]);
+
+  // Group switch handler inside report modal
+  const handleReportGroupChange = async (groupId: string) => {
+    setSelectedGroupId(groupId);
+    if (onSelectGroup) {
+      onSelectGroup(groupId);
+    }
+    try {
+      const res = await fetch(`/api/nodes?groupId=${groupId}`);
+      const data = await res.json();
+      if (res.ok) {
+        setReportPersons(data.persons || []);
+        setReportUnions(data.unions || []);
+      }
+    } catch {
+      console.error('Failed to fetch group nodes for report');
+    }
+  };
 
   // State for expanded folder node IDs
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
   const [reportSearchQuery, setReportSearchQuery] = useState('');
 
   // Build tree hierarchy
-  const treeNodes = useMemo(() => buildFamilyTreeNodes(persons, unions), [persons, unions]);
+  const treeNodes = useMemo(() => buildFamilyTreeNodes(reportPersons, reportUnions), [reportPersons, reportUnions]);
 
   // Collect all folder IDs
   const allFolderIds = useMemo(() => {
@@ -315,9 +374,9 @@ export function TreeViewReportModal({
   };
 
   // Stats
-  const totalPersons = persons.length;
-  const maleCount = persons.filter((p) => p.gender === 'MALE').length;
-  const femaleCount = persons.filter((p) => p.gender === 'FEMALE').length;
+  const totalPersons = reportPersons.length;
+  const maleCount = reportPersons.filter((p) => p.gender === 'MALE').length;
+  const femaleCount = reportPersons.filter((p) => p.gender === 'FEMALE').length;
 
   // Custom Print Handler: Expand all nodes first then trigger window.print()
   const handlePrint = () => {
@@ -443,8 +502,32 @@ export function TreeViewReportModal({
             isLight ? 'border-slate-200 bg-slate-100/50' : 'border-slate-800/80 bg-slate-950/40'
           }`}
         >
+          {/* Family Group Selector Dropdown */}
+          {groups.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className={`font-semibold shrink-0 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                กลุ่มเครือญาติ:
+              </span>
+              <select
+                value={selectedGroupId || ''}
+                onChange={(e) => handleReportGroupChange(e.target.value)}
+                className={`rounded-xl border px-3 py-1.5 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                  isLight
+                    ? 'border-slate-300 bg-white text-slate-800'
+                    : 'border-slate-700 bg-slate-900 text-slate-200'
+                }`}
+              >
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} ({g._count?.persons ?? 0} คน)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Search Input inside Report */}
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"

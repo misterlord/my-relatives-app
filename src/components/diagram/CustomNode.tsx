@@ -13,6 +13,7 @@ export interface PersonNodeData extends Record<string, unknown> {
   description?: string | null;
   birthDate?: string | null;
   isDeceased?: boolean;
+  childrenCount?: number;
   images?: { id: string; url: string }[];
   isCompact?: boolean;
   layoutMode?: LayoutMode;
@@ -180,11 +181,18 @@ const CustomPersonNodeComponent = ({
           >
             {data.name}
           </h3>
-          {age !== null && (
-            <span className={`inline-block rounded px-1 py-0.2 text-[9px] font-semibold border mt-0.5 ${badgeColor}`}>
-              {age} ปี
-            </span>
-          )}
+          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+            {age !== null && (
+              <span className={`inline-block rounded px-1 py-0.2 text-[9px] font-semibold border ${badgeColor}`}>
+                {age} ปี
+              </span>
+            )}
+            {data.childrenCount !== undefined && data.childrenCount > 0 && (
+              <span className={`inline-block rounded px-1 py-0.2 text-[9px] font-semibold border ${isLight ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-amber-950/60 text-amber-300 border-amber-800'}`}>
+                👶 {data.childrenCount}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -272,11 +280,18 @@ const CustomPersonNodeComponent = ({
             >
               {data.name}
             </h3>
-            {age !== null && (
-              <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold border mt-0.5 ${badgeColor}`}>
-                อายุ {age} ปี
-              </span>
-            )}
+            <div className="flex items-center gap-1 flex-wrap mt-0.5">
+              {age !== null && (
+                <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold border ${badgeColor}`}>
+                  อายุ {age} ปี
+                </span>
+              )}
+              {data.childrenCount !== undefined && data.childrenCount > 0 && (
+                <span className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-semibold border ${isLight ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-amber-950/60 text-amber-300 border-amber-800'}`}>
+                  👶 บุตร {data.childrenCount} คน
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

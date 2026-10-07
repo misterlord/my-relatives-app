@@ -241,6 +241,77 @@ export function NodeModal({
   const age = calculateAge(person?.birthDate);
   const formattedBirthDate = formatDateBE(person?.birthDate);
 
+  // Direct children count (only child nodes attached to parent's unions)
+  const directChildrenCount = React.useMemo(() => {
+    if (!person) return 0;
+    const unions = [...(person.unionsAsPartner1 || []), ...(person.unionsAsPartner2 || [])];
+    const childIds = new Set<string>();
+    unions.forEach((u) => {
+      if (u.children) {
+        u.children.forEach((c: any) => childIds.add(c.id));
+      }
+    });
+    return childIds.size;
+  }, [person]);
+
+  // Sibling list & position
+  const siblings = person?.parentUnion?.children || [];
+  const siblingIndex = siblings.findIndex((s: any) => s.id === person?.id);
+  const isFirstSibling = siblingIndex <= 0;
+  const isLastSibling = siblingIndex >= siblings.length - 1;
+
+  const handleMoveSibling = async (direction: 'left' | 'right') => {
+    if (!person || !person.parentUnion || !person.parentUnion.children) return;
+    const currentSiblings = [...person.parentUnion.children];
+    const currentIndex = currentSiblings.findIndex((c: any) => c.id === person.id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= currentSiblings.length) return;
+
+    // Swap elements
+    const temp = currentSiblings[currentIndex];
+    currentSiblings[currentIndex] = currentSiblings[targetIndex];
+    currentSiblings[targetIndex] = temp;
+
+    const reorderItems = currentSiblings.map((s: any, idx: number) => ({
+      id: s.id,
+      order: idx,
+    }));
+
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch('/api/nodes/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: reorderItems }),
+      });
+
+      if (res.ok) {
+        setSuccessMsg(
+          direction === 'left'
+            ? 'เลื่อนลำดับขึ้นเป็นพี่ (ซ้าย) เรียบร้อยแล้ว'
+            : 'เลื่อนลำดับลงเป็นน้อง (ขวา) เรียบร้อยแล้ว'
+        );
+        setTimeout(() => setSuccessMsg(null), 3000);
+        onRefresh();
+
+        // Re-fetch current person details
+        const personRes = await fetch(`/api/nodes/${nodeId}`);
+        const personData = await personRes.json();
+        if (personRes.ok) setPerson(personData.person);
+      } else {
+        const data = await res.json();
+        setError(data.error || 'สลับลำดับพี่-น้องไม่สำเร็จ');
+      }
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const genderBadge =
     person?.gender === 'MALE'
       ? {
@@ -501,6 +572,9 @@ export function NodeModal({
                         {person.isDeceased && <span className="text-rose-500 font-extrabold text-xs">❌</span>}
                         <span>{genderBadge.text}</span>
                       </span>
+                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border ${isLight ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-amber-950/60 text-amber-300 border-amber-800'}`}>
+                        👶 บุตร {directChildrenCount} คน
+                      </span>
                     </div>
 
                     {/* Parent Info in View Mode */}
@@ -521,6 +595,47 @@ export function NodeModal({
                               {parent.name}
                             </span>
                           ))}
+                      </div>
+                    )}
+
+                    {/* Sibling Reordering Controls */}
+                    {siblings.length > 1 && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dashed border-slate-700/40">
+                        <span className={`text-xs font-medium ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                          ลำดับพี่-น้องในครอบครัว ({siblingIndex + 1}/{siblings.length}):
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveSibling('left')}
+                            disabled={isFirstSibling || loading}
+                            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all ${
+                              isFirstSibling
+                                ? 'opacity-30 cursor-not-allowed border-slate-700 text-slate-500'
+                                : isLight
+                                ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                : 'border-indigo-500/40 bg-indigo-950/50 text-indigo-300 hover:bg-indigo-900/60'
+                            }`}
+                            title="เลื่อนโหนดขึ้นเป็นพี่ (ซ้าย)"
+                          >
+                            ⬅️ เลื่อนเป็นพี่
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveSibling('right')}
+                            disabled={isLastSibling || loading}
+                            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all ${
+                              isLastSibling
+                                ? 'opacity-30 cursor-not-allowed border-slate-700 text-slate-500'
+                                : isLight
+                                ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                : 'border-indigo-500/40 bg-indigo-950/50 text-indigo-300 hover:bg-indigo-900/60'
+                            }`}
+                            title="เลื่อนโหนดลงเป็นน้อง (ขวา)"
+                          >
+                            ➡️ เลื่อนเป็นน้อง
+                          </button>
+                        </div>
                       </div>
                     )}
 

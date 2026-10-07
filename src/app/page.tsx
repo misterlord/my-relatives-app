@@ -6,6 +6,7 @@ import { NodeDiagram, LayoutMode } from '@/components/diagram/NodeDiagram';
 import { NodeModal } from '@/components/modals/NodeModal';
 import { AddNodeModal } from '@/components/modals/AddNodeModal';
 import { TreeViewReportModal } from '@/components/report/TreeViewReportModal';
+import { FamilyGroupModal, FamilyGroup } from '@/components/modals/FamilyGroupModal';
 import {
   Users,
   Plus,
@@ -27,6 +28,11 @@ export default function DashboardPage() {
   const [unions, setUnions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Multi-group states
+  const [groups, setGroups] = useState<FamilyGroup[]>([]);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
 
   // Theme state
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -66,11 +72,33 @@ export default function DashboardPage() {
     localStorage.setItem('my_relatives_theme', nextTheme);
   };
 
+  // Fetch family groups
+  const fetchGroups = useCallback(async () => {
+    try {
+      const res = await fetch('/api/groups');
+      const data = await res.json();
+      if (res.ok && data.groups) {
+        setGroups(data.groups);
+        setActiveGroupId((prev) => {
+          if (prev && data.groups.some((g: any) => g.id === prev)) {
+            return prev;
+          }
+          const defaultG = data.groups.find((g: any) => g.isDefault) || data.groups[0];
+          return defaultG ? defaultG.id : null;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch family groups:', err);
+    }
+  }, []);
+
+  // Fetch nodes & unions filtered by activeGroupId
   const fetchFamilyTree = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/nodes');
+      const url = activeGroupId ? `/api/nodes?groupId=${activeGroupId}` : '/api/nodes';
+      const res = await fetch(url);
       if (res.status === 401) {
         router.push('/login');
         return;
@@ -79,6 +107,9 @@ export default function DashboardPage() {
       if (res.ok) {
         setPersons(data.persons || []);
         setUnions(data.unions || []);
+        if (data.activeGroupId && !activeGroupId) {
+          setActiveGroupId(data.activeGroupId);
+        }
       } else {
         setError(data.error || 'ดึงข้อมูลไม่สำเร็จ');
       }
@@ -87,7 +118,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, activeGroupId]);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -97,8 +128,14 @@ export default function DashboardPage() {
       })
       .catch(() => {});
 
-    fetchFamilyTree();
-  }, [fetchFamilyTree]);
+    fetchGroups();
+  }, [fetchGroups]);
+
+  useEffect(() => {
+    if (activeGroupId) {
+      fetchFamilyTree();
+    }
+  }, [activeGroupId, fetchFamilyTree]);
 
   // RESET & AUTO LAYOUT FUNCTION
   const handleResetAutoLayout = async () => {
@@ -245,6 +282,40 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {/* Family Group Selector Dropdown & Manage Button */}
+        {groups.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <select
+              value={activeGroupId || ''}
+              onChange={(e) => setActiveGroupId(e.target.value)}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all ${
+                isLight
+                  ? 'border-indigo-200 bg-indigo-50/80 text-indigo-900 hover:bg-indigo-100'
+                  : 'border-indigo-500/30 bg-indigo-950/70 text-indigo-200 hover:bg-indigo-900/60'
+              }`}
+              title="เลือกแสดงกลุ่มเครือญาติ"
+            >
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name} ({g._count?.persons ?? 0} คน)
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setIsGroupModalOpen(true)}
+              className={`flex items-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-semibold transition-all ${
+                isLight
+                  ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="จัดการกลุ่มเครือญาติ (เพิ่ม / แก้ไข / ลบ)"
+            >
+              <Plus className="h-3.5 w-3.5 text-indigo-500" />
+              <span className="hidden xl:inline">จัดการกลุ่ม</span>
+            </button>
+          </div>
+        )}
 
         {/* Search Bar with Live Suggestions */}
         <div className="relative flex-1 max-w-md">
@@ -476,6 +547,7 @@ export default function DashboardPage() {
             theme={theme}
             onSelectNode={(id) => setSelectedNodeId(id)}
             onAddNodeClick={() => handleOpenAddNodeModal(null, 'child')}
+            onRefreshNeeded={fetchFamilyTree}
           />
         )}
       </main>
@@ -486,7 +558,10 @@ export default function DashboardPage() {
         theme={theme}
         allPersons={persons.map((p) => ({ id: p.id, name: p.name, gender: p.gender }))}
         onClose={() => setSelectedNodeId(null)}
-        onRefresh={fetchFamilyTree}
+        onRefresh={() => {
+          fetchFamilyTree();
+          fetchGroups();
+        }}
         onOpenAddNode={(refId, relType) => handleOpenAddNodeModal(refId, relType)}
       />
 
@@ -495,10 +570,14 @@ export default function DashboardPage() {
         isOpen={isAddModalOpen}
         theme={theme}
         onClose={() => setIsAddModalOpen(false)}
-        onSuccess={fetchFamilyTree}
+        onSuccess={() => {
+          fetchFamilyTree();
+          fetchGroups();
+        }}
         allPersons={persons.map((p) => ({ id: p.id, name: p.name, gender: p.gender }))}
         initialReferencePersonId={addModalRefPersonId}
         initialRelationshipType={addModalRelationshipType}
+        groupId={activeGroupId}
       />
 
       {/* Directory Tree View Report Modal */}
@@ -507,8 +586,25 @@ export default function DashboardPage() {
         theme={theme}
         persons={persons}
         unions={unions}
+        groups={groups}
+        activeGroupId={activeGroupId}
         onClose={() => setIsReportModalOpen(false)}
         onSelectPerson={(id) => setSelectedNodeId(id)}
+        onSelectGroup={(groupId) => setActiveGroupId(groupId)}
+      />
+
+      {/* Family Group Management Modal */}
+      <FamilyGroupModal
+        isOpen={isGroupModalOpen}
+        theme={theme}
+        groups={groups}
+        activeGroupId={activeGroupId}
+        onClose={() => setIsGroupModalOpen(false)}
+        onSelectGroup={(id) => {
+          setActiveGroupId(id);
+          setIsGroupModalOpen(false);
+        }}
+        onRefreshGroups={fetchGroups}
       />
     </div>
   );

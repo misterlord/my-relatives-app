@@ -15,6 +15,19 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
+model FamilyGroup {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+
+  persons     Person[]
+  unions      Union[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Person {
   id             String      @id @default(cuid())
   name           String
@@ -24,6 +37,10 @@ model Person {
   isDeceased     Boolean     @default(false)
   positionX      Float?
   positionY      Float?
+  order          Float       @default(0)
+
+  groupId        String?
+  group          FamilyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
   images         NodeImage[]
 
@@ -39,6 +56,9 @@ model Person {
 
 model Union {
   id           String    @id @default(cuid())
+
+  groupId      String?
+  group        FamilyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
   partner1Id   String
   partner1     Person    @relation("Partner1Unions", fields: [partner1Id], references: [id], onDelete: Cascade)
