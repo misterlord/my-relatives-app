@@ -39,6 +39,7 @@ import {
   Minus,
   Network,
   Download,
+  Eye,
   Image as ImageIcon,
 } from 'lucide-react';
 
@@ -419,6 +420,21 @@ function NodeDiagramInner({
   // Flexible Edge Routing state: 'straight' (Straight lines) or 'step' (Orthogonal 90° lines)
   const [edgeRouting, setEdgeRouting] = useState<EdgeRoutingType>('straight');
 
+  // State for collapsed parent node IDs (hiding child subtrees)
+  const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
+
+  const handleToggleCollapseParent = useCallback((personId: string) => {
+    setCollapsedParentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(personId)) {
+        next.delete(personId);
+      } else {
+        next.add(personId);
+      }
+      return next;
+    });
+  }, []);
+
   // Toggle state for Top-Left Control Panel
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
 
@@ -450,11 +466,39 @@ function NodeDiagramInner({
       }
     });
 
+    // Build set of hidden descendant person IDs for collapsed parents
+    const hiddenPersonIds = new Set<string>();
+
+    const collectHiddenDescendants = (parentId: string, visited = new Set<string>()) => {
+      if (visited.has(parentId)) return;
+      visited.add(parentId);
+
+      const parentUnions = rawUnions.filter(
+        (u) => u.partner1Id === parentId || u.partner2Id === parentId
+      );
+
+      parentUnions.forEach((u) => {
+        if (u.children) {
+          u.children.forEach((child: any) => {
+            hiddenPersonIds.add(child.id);
+            collectHiddenDescendants(child.id, visited);
+          });
+        }
+      });
+    };
+
+    collapsedParentIds.forEach((pId) => {
+      collectHiddenDescendants(pId);
+    });
+
+    const visiblePersons = rawPersons.filter((p) => !hiddenPersonIds.has(p.id));
+
     // 1. Person Nodes
-    rawPersons.forEach((p) => {
+    visiblePersons.forEach((p) => {
       const hasSavedPosition =
         p.positionX !== null && p.positionY !== null && layoutMode === 'free_graph';
       const isSearchTarget = focusedPersonId === p.id;
+      const isCollapsed = collapsedParentIds.has(p.id);
 
       nodes.push({
         id: p.id,
@@ -467,6 +511,8 @@ function NodeDiagramInner({
           birthDate: p.birthDate,
           isDeceased: Boolean(p.isDeceased),
           childrenCount: childrenCountMap.get(p.id) || 0,
+          isCollapsed,
+          onToggleCollapse: handleToggleCollapseParent,
           order: p.order || 0,
           images: p.images,
           isCompact: isCompactView,
@@ -486,12 +532,17 @@ function NodeDiagramInner({
     const defaultSourceHandle = layoutMode === 'elk_horizontal' ? 'right-source' : 'bottom-source';
     const defaultTargetHandle = layoutMode === 'elk_horizontal' ? 'left-target' : 'top-target';
 
+    // Helper: only add edge if both source and target nodes are visible
+    const visiblePersonIdSet = new Set(visiblePersons.map((p) => p.id));
+
     // 2. Direct Parent-to-Child Edges (Straight Lines, Directional Handles)
     rawUnions.forEach((u) => {
       if (u.children && u.children.length > 0) {
         u.children.forEach((child: any) => {
+          if (!visiblePersonIdSet.has(child.id)) return;
+
           // Connect Partner 1 (e.g. Father) directly to Child
-          if (u.partner1Id) {
+          if (u.partner1Id && visiblePersonIdSet.has(u.partner1Id)) {
             const edgeId = `e-${u.partner1Id}-${child.id}`;
             if (!edges.some((e) => e.id === edgeId)) {
               edges.push({
@@ -508,7 +559,7 @@ function NodeDiagramInner({
           }
 
           // Connect Partner 2 (e.g. Mother) directly to Child
-          if (u.partner2Id) {
+          if (u.partner2Id && visiblePersonIdSet.has(u.partner2Id)) {
             const edgeId = `e-${u.partner2Id}-${child.id}`;
             if (!edges.some((e) => e.id === edgeId)) {
               edges.push({
@@ -529,11 +580,13 @@ function NodeDiagramInner({
 
     // 3. Fallback Direct Parent-Child Relation
     rawPersons.forEach((p) => {
+      if (!visiblePersonIdSet.has(p.id)) return;
+
       if (p.parentUnionId) {
         const parentUnion = rawUnions.find((u) => u.id === p.parentUnionId);
         if (parentUnion) {
           [parentUnion.partner1Id, parentUnion.partner2Id].forEach((parentPersonId) => {
-            if (parentPersonId) {
+            if (parentPersonId && visiblePersonIdSet.has(parentPersonId)) {
               const edgeId = `e-${parentPersonId}-${p.id}`;
               if (!edges.some((e) => e.id === edgeId)) {
                 edges.push({
@@ -563,6 +616,8 @@ function NodeDiagramInner({
     theme,
     isLight,
     focusedPersonId,
+    collapsedParentIds,
+    handleToggleCollapseParent,
     onSelectNode,
   ]);
 
@@ -983,7 +1038,23 @@ function NodeDiagramInner({
             </div>
           )}
 
-          {/* 4. Export JPEG Button */}
+          {/* 4. Expand Collapsed Subtrees Button */}
+          {collapsedParentIds.size > 0 && (
+            <button
+              onClick={() => setCollapsedParentIds(new Set())}
+              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition-all shadow-md ${
+                isLight
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 hover:bg-amber-400 font-extrabold'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+              }`}
+              title="แสดงโหนดบุตรหลานทั้งหมดที่ถูกซ่อนอยู่"
+            >
+              <Eye className="h-4 w-4 text-amber-400" />
+              <span>แสดงโหนดทั้งหมด ({collapsedParentIds.size} บุพการีซ่อนอยู่)</span>
+            </button>
+          )}
+
+          {/* 5. Export JPEG Button */}
           <button
             onClick={handleExportJpeg}
             disabled={isExportingJpeg}

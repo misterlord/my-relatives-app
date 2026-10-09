@@ -14,6 +14,8 @@ export interface PersonNodeData extends Record<string, unknown> {
   birthDate?: string | null;
   isDeceased?: boolean;
   childrenCount?: number;
+  isCollapsed?: boolean;
+  onToggleCollapse?: (id: string) => void;
   images?: { id: string; url: string }[];
   isCompact?: boolean;
   layoutMode?: LayoutMode;
@@ -188,9 +190,24 @@ const CustomPersonNodeComponent = ({
               </span>
             )}
             {data.childrenCount !== undefined && data.childrenCount > 0 && (
-              <span className={`inline-block rounded px-1 py-0.2 text-[9px] font-semibold border ${isLight ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-amber-950/60 text-amber-300 border-amber-800'}`}>
-                👶 {data.childrenCount}
-              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onToggleCollapse?.(data.id);
+                }}
+                className={`inline-flex items-center gap-0.5 rounded px-1 py-0.2 text-[9px] font-semibold border transition-all ${
+                  data.isCollapsed
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 font-bold'
+                    : isLight
+                    ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                    : 'bg-amber-950/60 text-amber-300 border-amber-800 hover:bg-amber-900/60'
+                }`}
+                title={data.isCollapsed ? 'คลิกเพื่อแสดงโหนดบุตรหลาน' : 'คลิกเพื่อซ่อนโหนดบุตรหลาน'}
+              >
+                <span>{data.isCollapsed ? '▶️' : '🔽'}</span>
+                <span>{data.childrenCount}</span>
+              </button>
             )}
           </div>
         </div>
@@ -287,9 +304,25 @@ const CustomPersonNodeComponent = ({
                 </span>
               )}
               {data.childrenCount !== undefined && data.childrenCount > 0 && (
-                <span className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-semibold border ${isLight ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-amber-950/60 text-amber-300 border-amber-800'}`}>
-                  👶 บุตร {data.childrenCount} คน
-                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    data.onToggleCollapse?.(data.id);
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold border transition-all ${
+                    data.isCollapsed
+                      ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 font-bold'
+                      : isLight
+                      ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                      : 'bg-amber-950/60 text-amber-300 border-amber-800 hover:bg-amber-900/60'
+                  }`}
+                  title={data.isCollapsed ? 'คลิกเพื่อแสดงสายบุตรหลาน' : 'คลิกเพื่อซ่อนสายบุตรหลาน'}
+                >
+                  <span>{data.isCollapsed ? '▶️' : '🔽'}</span>
+                  <span>บุตร {data.childrenCount} คน</span>
+                  {data.isCollapsed && <span className="text-[9px] opacity-80">(ซ่อนอยู่)</span>}
+                </button>
               )}
             </div>
           </div>

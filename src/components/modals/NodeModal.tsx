@@ -112,6 +112,19 @@ export function NodeModal({
     fetchPerson();
   }, [nodeId]);
 
+  // Direct children count (only child nodes attached to parent's unions)
+  const directChildrenCount = React.useMemo(() => {
+    if (!person) return 0;
+    const unions = [...(person.unionsAsPartner1 || []), ...(person.unionsAsPartner2 || [])];
+    const childIds = new Set<string>();
+    unions.forEach((u) => {
+      if (u.children) {
+        u.children.forEach((c: any) => childIds.add(c.id));
+      }
+    });
+    return childIds.size;
+  }, [person]);
+
   if (!nodeId) return null;
 
   const handleSaveText = async () => {
@@ -240,19 +253,6 @@ export function NodeModal({
 
   const age = calculateAge(person?.birthDate);
   const formattedBirthDate = formatDateBE(person?.birthDate);
-
-  // Direct children count (only child nodes attached to parent's unions)
-  const directChildrenCount = React.useMemo(() => {
-    if (!person) return 0;
-    const unions = [...(person.unionsAsPartner1 || []), ...(person.unionsAsPartner2 || [])];
-    const childIds = new Set<string>();
-    unions.forEach((u) => {
-      if (u.children) {
-        u.children.forEach((c: any) => childIds.add(c.id));
-      }
-    });
-    return childIds.size;
-  }, [person]);
 
   // Sibling list & position
   const siblings = person?.parentUnion?.children || [];
