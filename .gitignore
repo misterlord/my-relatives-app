@@ -20,3 +20,10 @@ yarn-error.log*
 .env*.local
 .env
 node_modules
+
+# sqlite database files
+myrelatives.db
+prisma/*.db
+*.db
+*.db-journal
+
